@@ -39,15 +39,15 @@ echo 'build changes'
 make -C build/
 
 if [ $? -eq 0 ]; then
-	    echo 'OK Compile'
-    else
-	        echo 'FAIL Compile'
-	       exit	
-	fi
+	echo 'OK Compile'
+else
+	echo 'FAIL Compile'
+	exit	
+fi
 
 
 
-clang-3.9 $Source -c -emit-llvm -o guarded.bc
+clang-6.0 $Source -c -emit-llvm -o guarded.bc
 
 echo 'Remove old files'
 rm guide.txt
@@ -58,29 +58,30 @@ rm out
 bitcode=guarded.bc
 
 echo 'Transform SC'
-opt-3.9 -load $INPUT_DEP_PATH/libInputDependency.so -load $UTILS_LIB -load $INPUT_DEP_PATH/libTransforms.so -load $SC_PATH/libSCPass.so $bitcode -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity=$Con -dump-checkers-network="network_file" -dump-sc-stat="sc.stats" -filter-file=$FilterFile -o out.bc
+opt-6.0 -load $INPUT_DEP_PATH/libInputDependency.so -load $UTILS_LIB -load $INPUT_DEP_PATH/libTransforms.so -load $SC_PATH/libSCPass.so $bitcode -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity=$Con -dump-checkers-network="network_file" -dump-sc-stat="sc.stats" -filter-file=$FilterFile -o out.bc
 
 if [ $? -eq 0 ]; then
-	    echo 'OK Transform'
-    else
-	        echo 'FAIL Transform'
-	       exit	
-	fi
+	echo 'OK Transform'
+else
+	echo 'FAIL Transform'
+	exit	
+fi
 
 
 
 #link guardMe function
-clang-3.9 rtlib.c -c -emit-llvm -o rtlib.bc
-llvm-link-3.9 out.bc rtlib.bc -o out.bc
+# clang-6.0 rtlib.c -c -emit-llvm -o rtlib.bc
+clang-6.0 rtlib.c_obf.c -c -emit-llvm -o rtlib.bc
+llvm-link-6.0 out.bc rtlib.bc -o out.bc
 
 
 echo 'Post patching binary after hash calls'
-llc-3.9 out.bc
+llc-6.0 out.bc
 gcc -c -rdynamic out.s -o out.o -lncurses
 #gcc -g -rdynamic -c rtlib.c -o rtlib.o
-gcc -g -rdynamic out.o response.o -o out -lncurses 
+gcc -g -rdynamic out.o -o out -lncurses 
 
-#clang++-3.9 -lncurses -rdynamic -std=c++0x out.bc -o out
+#clang++-6.0 -lncurses -rdynamic -std=c++0x out.bc -o out
 python patcher/dump_pipe.py out guide.txt patch_guide
 echo 'Done patching'
 
