@@ -16,7 +16,7 @@ tigress_options = {
     "flatten":  "Flatten",
 }
 
-obfuscation_options = []
+obfuscation_options = ['none']
 obfuscation_options.extend(tigress_options.keys())
 
 def parse_args(argv):
@@ -62,22 +62,22 @@ def run_cmd(cmd):
     return True
 
 
-def compile_to_bc(source_file, build_dir):
+def compile_source_to_bc(source_file, build_dir):
     cmd = "{compiler} {source} -c -emit-llvm -o {build_dir}/source.bc".format(compiler=CLANG, source=source_file, build_dir=build_dir)
     if not run_cmd(cmd):
-        print("compile_to_bc failed:\n   {}".format(cmd))
+        print("compile_source_to_bc failed:\n   {}".format(cmd))
         return False
     return True
 
 def apply_selfchecking(connectivity, build_dir):
-    cmd = '{opt} -load "{indep_path}/libInputDependency.so" -load "{util}" -load "{indep_path}/libTransforms.so" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -o "{build_dir}/guarded.bc" "{build_dir}/source.bc"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir)
+    cmd = '{opt} -load "{indep_path}/libInputDependency.so" -load "{util}" -load "{indep_path}/libTransforms.so" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -o "{build_dir}/checked.bc" "{build_dir}/source.bc"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir)
 
     if not run_cmd(cmd):
         print("apply_selfchecking failed:\n   {}".format(cmd))
         return False
     return True
 
-def obfuscate_guard(obfuscations, build_dir):
+def obfuscate_checker(obfuscations, build_dir):
     rtlib_path = os.path.join(SC_HOME, 'rtlib.c')
 
     # no obfuscations specified, no need to obfuscate
@@ -92,28 +92,28 @@ def obfuscate_guard(obfuscations, build_dir):
         transforms = ['--obfuscation {}'.format(tigress_options[obf]) for obf in tigress_obfs]
         tigress_args = '--out {out_file} {transforms} --functions=guardMe {input}'.format(out_file=rtlib_path, transforms=' '.join(transforms), input=org_rtlib)
         if not tigress_main(shlex.split(tigress_args)):
-            print('obfuscate_guard failed')
+            print('obfuscate_checker failed')
             return False
 
     return rtlib_path
 
-def compile_guard_to_bc(build_dir, guard_file):
-    guard_bc = os.path.join(build_dir, 'guard.bc')
-    cmd = "{compiler} {guard_file} -c -emit-llvm -o {out}".format(compiler=CLANG, guard_file=guard_file, out=guard_bc)
+def compile_checker_to_bc(build_dir, checker_file):
+    checker_bc = os.path.join(build_dir, 'checker.bc')
+    cmd = "{compiler} {checker_file} -c -emit-llvm -o {out}".format(compiler=CLANG, checker_file=checker_file, out=checker_bc)
     if not run_cmd(cmd):
-        print('compile_guard_to_bc failed:\n   {}'.format(cmd))
+        print('compile_checker_to_bc failed:\n   {}'.format(cmd))
         return False
 
-    return guard_bc
+    return checker_bc
 
-def link_guard_and_source(args, build_dir):
-    guard_bc = os.path.join(build_dir, 'guard.bc')
-    source_bc = os.path.join(build_dir, 'guarded.bc')
-    cmd = "{linker} {guard_file} {source_file} -o {out}".format(linker=CLANG, guard_file=guard_bc, source_file=source_bc, out=args.output)
+def link_checker_and_source(args, build_dir):
+    checker_bc = os.path.join(build_dir, 'checker.bc')
+    source_bc = os.path.join(build_dir, 'checked.bc')
+    cmd = "{linker} {checker_file} {source_file} -o {out}".format(linker=CLANG, checker_file=checker_bc, source_file=source_bc, out=args.output)
     if args.verbose:
         print(cmd)
     if not run_cmd(cmd):
-        print('compile_guard_to_bc failed:\n   {}'.format(cmd))
+        print('compile_checker_to_bc failed:\n   {}'.format(cmd))
         return False
 
     return True
@@ -128,9 +128,9 @@ def patch_binary(args, build_dir):
 def run(args):
     build_dir  = tempfile.mkdtemp()
     if args.verbose:
-        print('[*] compile_to_bc')
-    if not compile_to_bc(args.source_file, build_dir):
-        print('[-] compile_to_bc')
+        print('[*] compile_source_to_bc')
+    if not compile_source_to_bc(args.source_file, build_dir):
+        print('[-] compile_source_to_bc')
         return False
 
     if args.verbose:
@@ -140,22 +140,22 @@ def run(args):
         return False
     
     if args.verbose:
-        print('[*] obfuscate_guard')
-    guard_file = obfuscate_guard(args.obfuscation, build_dir)
-    if not guard_file:
-        print('[-] obfuscate_guard')
+        print('[*] obfuscate_checker')
+    checker_file = obfuscate_checker(args.obfuscation, build_dir)
+    if not checker_file:
+        print('[-] obfuscate_checker')
         return False
 
     if args.verbose:
-        print('[*] compile_guard_to_bc')
-    if not compile_guard_to_bc(build_dir, guard_file):
-        print('[-] compile_guard_to_bc')
+        print('[*] compile_checker_to_bc')
+    if not compile_checker_to_bc(build_dir, checker_file):
+        print('[-] compile_checker_to_bc')
         return False
 
     if args.verbose:
-        print('[*] link_guard_and_source')
-    if not link_guard_and_source(args, build_dir):
-        print('[-] link_guard_and_source')
+        print('[*] link_checker_and_source')
+    if not link_checker_and_source(args, build_dir):
+        print('[-] link_checker_and_source')
         return False
 
     if args.verbose:
