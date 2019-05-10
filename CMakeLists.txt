@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.4)
 
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 set (INPUT_DEP_INCLUDE_DIR "/usr/local/include/input-dependency")
 set (INPUT_DEP_LIB_DIR "/usr/local/lib")
 
