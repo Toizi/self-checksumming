@@ -21,6 +21,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <cxxabi.h>
+#include <random>
 
 using namespace llvm;
 static cl::opt<bool> UseOtherFunctions(
