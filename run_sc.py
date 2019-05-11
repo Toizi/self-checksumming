@@ -5,6 +5,7 @@ import tempfile
 import os
 import subprocess
 import shlex
+import traceback
 from run_tigress import main as tigress_main
 
 mydir = os.path.dirname(os.path.abspath(__file__))
@@ -16,8 +17,13 @@ tigress_options = {
     "flatten":  "Flatten",
 }
 
+ollvm_options = {
+    "opaque":    "-bcf"
+}
+
 obfuscation_options = ['none']
 obfuscation_options.extend(tigress_options.keys())
+obfuscation_options.extend(ollvm_options.keys())
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
@@ -54,30 +60,36 @@ def setup_environment():
     INPUTDEP_PATH = '/usr/local/lib'
     return SC_BUILD, SC_HOME
 
-def run_cmd(cmd):
+def run_cmd(cmd, log_file=None):
+    # print('run_cmd: {}'.format(cmd))
     try:
-        subprocess.check_call(shlex.split(cmd))#, stdout=subprocess.STDOUT, stderr=subprocess.STDOUT)
+        subprocess.check_call(shlex.split(cmd) if isinstance(cmd, basestring) else cmd,
+            stdout=log_file,
+            stderr=log_file)
     except subprocess.CalledProcessError:
+        traceback.print_exc()
         return False
     return True
 
 
 def compile_source_to_bc(source_file, build_dir):
-    cmd = "{compiler} {source} -c -emit-llvm -o {build_dir}/source.bc".format(compiler=CLANG, source=source_file, build_dir=build_dir)
+    source_bc = os.path.join(build_dir, "source.bc")
+    cmd = "{compiler} {source} -c -emit-llvm -o {out}".format(compiler=CLANG, source=source_file, out=source_bc)
     if not run_cmd(cmd):
         print("compile_source_to_bc failed:\n   {}".format(cmd))
         return False
-    return True
+    return source_bc
 
-def apply_selfchecking(connectivity, build_dir):
-    cmd = '{opt} -load "{indep_path}/libInputDependency.so" -load "{util}" -load "{indep_path}/libTransforms.so" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -o "{build_dir}/checked.bc" "{build_dir}/source.bc"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir)
+def apply_selfchecking(connectivity, build_dir, source_bc):
+    checked_bc = os.path.join(build_dir, 'checked.bc')
+    cmd = '{opt} -load "{indep_path}/libInputDependency.so" -load "{util}" -load "{indep_path}/libTransforms.so" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -o "{out}" "{src}"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc)
 
     if not run_cmd(cmd):
         print("apply_selfchecking failed:\n   {}".format(cmd))
         return False
-    return True
+    return checked_bc
 
-def obfuscate_checker(obfuscations, build_dir):
+def obfuscate_checker_src(obfuscations, build_dir):
     rtlib_path = os.path.join(SC_HOME, 'rtlib.c')
 
     # no obfuscations specified, no need to obfuscate
@@ -92,10 +104,43 @@ def obfuscate_checker(obfuscations, build_dir):
         transforms = ['--obfuscation {}'.format(tigress_options[obf]) for obf in tigress_obfs]
         tigress_args = '--out {out_file} {transforms} --functions=guardMe {input}'.format(out_file=rtlib_path, transforms=' '.join(transforms), input=org_rtlib)
         if not tigress_main(shlex.split(tigress_args)):
-            print('obfuscate_checker failed')
+            print('obfuscate_checker_src failed')
             return False
 
     return rtlib_path
+
+
+def obfuscate_checker_bc(obfuscations, build_dir, checker_bc):
+    ollvm_bin = os.path.join(SC_HOME, 'obfuscation/Obfuscator-LLVM/build/bin')
+
+    # no obfuscations specified, no need to obfuscate
+    if not obfuscations:
+        return checker_bc
+
+    # check for tigress obfuscations
+    ollvm_obfs = set(ollvm_options.keys()) & set(obfuscations)
+    if ollvm_obfs:
+        org_checker = checker_bc
+        checker_bc = os.path.join(build_dir, 'checker_obf.bc')
+        transforms = [ollvm_options[obf] for obf in ollvm_obfs]
+        cmd = [os.path.join(ollvm_bin, 'clang'),
+            '-o', checker_bc,
+            '-c', '-emit-llvm',
+            org_checker,
+        ]
+        for transform in transforms:
+            cmd.append('-mllvm')
+            cmd.append(transform)
+        # '--out {out_file} {transforms} --functions=guardMe {input}'.format(out_file=rtlib_path, transforms=' '.join(transforms), input=org_rtlib)]
+        log_dir = os.path.join(build_dir, 'obfuscate_checker_bc.log')
+        print('running {} > {}'.format(' '.join(cmd), log_dir))
+        with open(log_dir, 'w') as f:
+            success = run_cmd(cmd, f)
+        if not success:
+            print('obfuscate_checker_bc failed')
+            return False
+
+    return checker_bc
 
 def compile_checker_to_bc(build_dir, checker_file):
     checker_bc = os.path.join(build_dir, 'checker.bc')
@@ -106,9 +151,7 @@ def compile_checker_to_bc(build_dir, checker_file):
 
     return checker_bc
 
-def link_checker_and_source(args, build_dir):
-    checker_bc = os.path.join(build_dir, 'checker.bc')
-    source_bc = os.path.join(build_dir, 'checked.bc')
+def link_checker_and_source(args, build_dir, source_bc, checker_bc):
     cmd = "{linker} {checker_file} {source_file} -o {out}".format(linker=CLANG, checker_file=checker_bc, source_file=source_bc, out=args.output)
     if args.verbose:
         print(cmd)
@@ -116,51 +159,61 @@ def link_checker_and_source(args, build_dir):
         print('compile_checker_to_bc failed:\n   {}'.format(cmd))
         return False
 
-    return True
+    return args.output
 
-def patch_binary(args, build_dir):
-    dump_args = '"{out_file}" --patch-guide="{build_dir}/patch_guide.txt" --patch-dump="{build_dir}/patches.txt" --sc-stats="{build_dir}/sc.stats" -v'.format(out_file=args.output, build_dir=build_dir)
+def patch_binary(args, build_dir, out_file):
+    dump_args = '"{out_file}" --patch-guide="{build_dir}/patch_guide.txt" --patch-dump="{build_dir}/patches.txt" --sc-stats="{build_dir}/sc.stats" -v'.format(out_file=out_file, build_dir=build_dir)
     if not dump_main(shlex.split(dump_args)):
         print('patch_binary failed')
         return False
     return True
 
-def run(args):
-    build_dir  = tempfile.mkdtemp()
+def run(args, build_dir):
     if args.verbose:
         print('[*] compile_source_to_bc')
-    if not compile_source_to_bc(args.source_file, build_dir):
+    source_bc = compile_source_to_bc(args.source_file, build_dir)
+    if not source_bc:
         print('[-] compile_source_to_bc')
         return False
 
     if args.verbose:
         print('[*] apply_selfchecking')
-    if not apply_selfchecking(args.connectivity, build_dir):
+    checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc)
+    if not checked_bc:
         print('[-] apply_selfchecking')
         return False
     
     if args.verbose:
-        print('[*] obfuscate_checker')
-    checker_file = obfuscate_checker(args.obfuscation, build_dir)
+        print('[*] obfuscate_checker_src')
+    checker_file = obfuscate_checker_src(args.obfuscation, build_dir)
     if not checker_file:
-        print('[-] obfuscate_checker')
+        print('[-] obfuscate_checker_src')
         return False
 
     if args.verbose:
         print('[*] compile_checker_to_bc')
-    if not compile_checker_to_bc(build_dir, checker_file):
+    checker_bc = compile_checker_to_bc(build_dir, checker_file)
+    if not checker_bc:
         print('[-] compile_checker_to_bc')
         return False
 
     if args.verbose:
+        print('[*] obfuscate_checker_bc')
+    checker_bc = obfuscate_checker_bc(args.obfuscation, build_dir, checker_bc)
+    if not checker_bc:
+        print('[-] obfuscate_checker_bc')
+        return False
+
+    if args.verbose:
         print('[*] link_checker_and_source')
-    if not link_checker_and_source(args, build_dir):
+    out_file = link_checker_and_source(args, build_dir, checked_bc, checker_bc)
+    if not out_file:
         print('[-] link_checker_and_source')
         return False
 
     if args.verbose:
         print('[*] patch_binary')
-    if not patch_binary(args, build_dir):
+    if not patch_binary(args, build_dir, out_file):
         print('[-] patch_binary')
         return False
     return True
@@ -168,7 +221,8 @@ def run(args):
 def main(argv):
     args = parse_args(argv)
     setup_environment()
-    run(args)
+    build_dir  = tempfile.mkdtemp()
+    run(args, build_dir)
 
     if args.verbose:
         print('Done')
