@@ -25,6 +25,8 @@ def parse_args(argv):
     parser.add_argument("-o", "--output", help="output path", required=False)
     parser.add_argument("-ob", "--obfuscation", help="list of obfuscations",
                         action='append', required=False)
+    parser.add_argument("--print-only", action="store_true",
+        help="only print the commands to compile but do not execute them")
     parser.add_argument("input_dir", type=str)
 
     args = parser.parse_args(argv)
@@ -72,9 +74,10 @@ def main(argv):
     print('[*] creating output dir {}'.format(args.output))
     os.mkdir(args.output)
     for cmd in cmds:
-        if args.verbose:
+        if args.verbose or args.print_only:
             print('running {}'.format(cmd))
-        run_cmd(cmd)
+        if not args.print_only:
+            run_cmd(cmd)
 
 if __name__ == '__main__':
     main(os.sys.argv[1:])
