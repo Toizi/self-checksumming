@@ -73,11 +73,21 @@ def main(argv):
         pprint(cmds)
     print('[*] creating output dir {}'.format(args.output))
     os.mkdir(args.output)
+    failed_cmds = []
     for cmd in cmds:
         if args.verbose or args.print_only:
             print('running {}'.format(cmd))
         if not args.print_only:
-            run_cmd(cmd)
+            if not run_cmd(cmd):
+                failed_cmds.append(cmd)
+    if failed_cmds:
+        print('[-] {} command(s) failed'.format(len(failed_cmds)))
+        for failed_cmd in failed_cmds:
+            print(failed_cmd)
+        return False
+
+    print('[{}] Done'.format('-' if failed_cmds else '+'))
+    return True
 
 if __name__ == '__main__':
     main(os.sys.argv[1:])
