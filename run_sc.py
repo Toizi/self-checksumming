@@ -18,7 +18,9 @@ tigress_options = {
 }
 
 ollvm_options = {
-    "opaque":    "-bcf"
+    "opaque":    "-bcf",
+    "subst":     "-sub",
+    "indir":     "-cfg-indirect",
 }
 
 obfuscation_options = ['none']
