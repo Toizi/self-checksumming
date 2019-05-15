@@ -18,6 +18,10 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Support/SourceMgr.h"
 #include <limits.h>
 #include <stdint.h>
 #include <cxxabi.h>
@@ -62,9 +66,68 @@ static cl::opt<std::string> PatchGuide(
     "patch-guide", cl::Hidden,
     cl::desc("File path to dump patch information "));
 
+static cl::opt<std::string> CheckerBitcodePath(
+    "checker-bitcode", cl::Hidden,
+    cl::desc("File path of bitcode containing the checker function "));
+
+static const std::string CheckerFunctionName = "guardMe";
 
 namespace
 {
+
+bool InlineFunctionCalls(Module &M, const std::vector<CallInst*> calls)
+{
+  for (const auto &call : calls) {
+    InlineFunctionInfo ifunc_info;
+    if (!InlineFunction(call, ifunc_info, nullptr, false))
+    {
+      errs() << "could not inline function call\n";
+      return false;
+    }
+  }
+  return true;
+}
+
+bool LinkBitcodeModule(Module *M, const std::string bitcode_path)
+{
+  // parse the bitcode to get a Module handle
+  SMDiagnostic error;
+  std::unique_ptr<Module> newModule = parseIRFile(bitcode_path, error, M->getContext());
+  if (!&*newModule)
+  {
+    errs() << "Could not open file: " << bitcode_path << "\n";
+    return false;
+  }
+
+  // internalize all globals that come from the linked module
+  auto internalize_globals_callback = [](Module &M, const StringSet<> &globals) {
+    for (auto &global : globals)
+    {
+      if (GlobalValue *gv = M.getNamedValue(global.getKey()))
+      {
+        // skip intrinsic global variables
+        if (isa<GlobalVariable>(gv) && (gv->getName().startswith("llvm.")))
+          continue;
+
+        gv->setLinkage(GlobalValue::InternalLinkage);
+      }
+    }
+  };
+
+  // link the hash module into the current module
+  Linker linker(*M);
+  bool failed = linker.linkInModule(std::move(newModule), llvm::Linker::Flags::None,
+                                    internalize_globals_callback);
+
+  newModule.release();
+  if (failed)
+  {
+    errs() << "LinkModule error: file " << bitcode_path << "\n";
+    return false;
+  }
+
+  return true;
+}
 
 std::string demangle_name(const std::string &name)
 {
@@ -96,6 +159,8 @@ struct SCPass : public ModulePass
   const std::string sc_guard_str = "sc_guard";
   FILE *guide_file = nullptr;
   std::string guide_file_path;
+  std::string checker_file_path;
+  bool linked_checker = false;
 
   /*long getFuncInstructionCount(const Function &F){
       long count=0;
@@ -135,16 +200,13 @@ struct SCPass : public ModulePass
     auto *sc_guard_md_str = llvm::MDString::get(M.getContext(), sc_guard_str);
     sc_guard_md = llvm::MDNode::get(M.getContext(), sc_guard_md_str);
 
-    if (PatchGuide.empty()) {
-      guide_file_path = "guide.txt";
-    } else {
-      guide_file_path = PatchGuide.getValue();
-    }
+    guide_file_path = PatchGuide.empty() ? "guide.txt" : PatchGuide.getValue();
+    checker_file_path = CheckerBitcodePath.empty() ? "checker.bc" : CheckerBitcodePath.getValue();
 
     int countProcessedFuncs = 0;
     for (auto &F : M)
     {
-      if (F.isDeclaration() || F.empty() || F.getName() == "guardMe")
+      if (F.isDeclaration() || F.empty() || F.getName() == CheckerFunctionName)
         continue;
 
       countProcessedFuncs++;
@@ -300,6 +362,9 @@ struct SCPass : public ModulePass
     {
       ProtectedFuncs[SF] = 0;
     }
+
+    // save checker calls to inline them later
+    std::vector<CallInst*> checker_calls;
     // inject one guard for each item in the checkee vector
     // reverse topologically sorted
     for (auto &F : topologicalSortFuncs)
@@ -325,9 +390,33 @@ struct SCPass : public ModulePass
         dbgs() << "Insert guard in " << F->getName()
                << " checkee: " << Checkee->getName() << "\n";
         numberOfGuards++;
-        injectGuard(&BB, I, Checkee, numberOfGuardInstructions,
+
+        // link checker module if it hasn't been done yet
+        if (!linked_checker) {
+          if (!LinkBitcodeModule(&M, checker_file_path)) {
+            exit(1);
+          }
+          linked_checker = true;
+        }
+        CallInst *call = injectGuard(&BB, I, Checkee, numberOfGuardInstructions,
                     false); // F_input_dependency_info->isInputDepFunction() || F_input_dependency_info->isExtractedFunction());
+        checker_calls.push_back(call);
         didModify = true;
+      }
+    }
+
+    // inline function calls and remove the checker function
+    if (!checker_calls.empty())
+    {
+      dbgs() << "Inlining " << checker_calls.size() << " function calls\n";
+      if (!InlineFunctionCalls(M, checker_calls))
+        exit(1);
+      Function *checker_func = M.getFunction(CheckerFunctionName);
+      if (!checker_func) {
+        errs() << "could not get checker_function (to remove it)\n";
+        exit(1);
+      } else {
+        checker_func->eraseFromParent();
       }
     }
 
@@ -388,7 +477,8 @@ struct SCPass : public ModulePass
       //exit(1);
     }
 
-    if (guide_file) {
+    if (guide_file)
+    {
       fclose(guide_file);
       guide_file = nullptr;
     }
@@ -441,7 +531,7 @@ struct SCPass : public ModulePass
   unsigned int size_begin = 555555555;
   unsigned int address_begin = 222222222;
   unsigned int expected_hash_begin = 444444444;
-  void injectGuard(BasicBlock *BB, Instruction *I, Function *Checkee,
+  CallInst* injectGuard(BasicBlock *BB, Instruction *I, Function *Checkee,
                    int &numberOfGuardInstructions, bool is_in_inputdep)
   {
     LLVMContext &Ctx = BB->getParent()->getContext();
@@ -449,7 +539,7 @@ struct SCPass : public ModulePass
     llvm::ArrayRef<llvm::Type *> params;
     params = {Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx)};
     llvm::FunctionType *function_type = llvm::FunctionType::get(llvm::Type::getVoidTy(Ctx), params, false);
-    Constant *guardFunc = BB->getParent()->getParent()->getOrInsertFunction("guardMe", function_type);
+    Constant *guardFunc = BB->getParent()->getParent()->getOrInsertFunction(CheckerFunctionName, function_type);
 
     IRBuilder<> builder(I);
     auto insertPoint = ++builder.GetInsertPoint();
@@ -511,6 +601,7 @@ struct SCPass : public ModulePass
     Checkee->addFnAttr(llvm::Attribute::NoInline);
     // Stats: we assume the call instrucion and its arguments account for one
     // instruction
+    return call;
   }
 };
 } // namespace

@@ -82,9 +82,9 @@ def compile_source_to_bc(source_file, build_dir):
         return False
     return source_bc
 
-def apply_selfchecking(connectivity, build_dir, source_bc):
+def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc):
     checked_bc = os.path.join(build_dir, 'checked.bc')
-    cmd = '{opt} -load "{indep_path}/libInputDependency.so" -load "{util}" -load "{indep_path}/libTransforms.so" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -o "{out}" "{src}"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc)
+    cmd = '{opt} -load "{indep_path}/libInputDependency.so" -load "{util}" -load "{indep_path}/libTransforms.so" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -checker-bitcode={checker} -o "{out}" "{src}"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc, checker=checker_bc)
 
     if not run_cmd(cmd):
         print("apply_selfchecking failed:\n   {}".format(cmd))
@@ -158,7 +158,16 @@ def link_checker_and_source(args, build_dir, source_bc, checker_bc):
     if args.verbose:
         print(cmd)
     if not run_cmd(cmd):
-        print('compile_checker_to_bc failed:\n   {}'.format(cmd))
+        return False
+
+    return args.output
+
+def link(args, checked_bc):
+    cmd = "{linker} {source_file} -o {out}".format(linker=CLANG, source_file=checked_bc, out=args.output)
+    if args.verbose:
+        print(cmd)
+    if not run_cmd(cmd):
+        print('link failed:\n   {}'.format(cmd))
         return False
 
     return args.output
@@ -171,20 +180,6 @@ def patch_binary(args, build_dir, out_file):
     return True
 
 def run(args, build_dir):
-    if args.verbose:
-        print('[*] compile_source_to_bc')
-    source_bc = compile_source_to_bc(args.source_file, build_dir)
-    if not source_bc:
-        print('[-] compile_source_to_bc')
-        return False
-
-    if args.verbose:
-        print('[*] apply_selfchecking')
-    checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc)
-    if not checked_bc:
-        print('[-] apply_selfchecking')
-        return False
-    
     if args.verbose:
         print('[*] obfuscate_checker_src')
     checker_file = obfuscate_checker_src(args.obfuscation, build_dir)
@@ -207,11 +202,31 @@ def run(args, build_dir):
         return False
 
     if args.verbose:
-        print('[*] link_checker_and_source')
-    out_file = link_checker_and_source(args, build_dir, checked_bc, checker_bc)
-    if not out_file:
-        print('[-] link_checker_and_source')
+        print('[*] compile_source_to_bc')
+    source_bc = compile_source_to_bc(args.source_file, build_dir)
+    if not source_bc:
+        print('[-] compile_source_to_bc')
         return False
+
+    if args.verbose:
+        print('[*] apply_selfchecking')
+    checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc, checker_bc)
+    if not checked_bc:
+        print('[-] apply_selfchecking')
+        return False
+
+    if args.verbose:
+        print('[*] link')
+    out_file = link(args, checked_bc)
+    if not out_file:
+        print('[-] link')
+        return False
+    # if args.verbose:
+    #     print('[*] link_checker_and_source')
+    # out_file = link_checker_and_source(args, build_dir, checked_bc, checker_bc)
+    # if not out_file:
+    #     print('[-] link_checker_and_source')
+    #     return False
 
     if args.verbose:
         print('[*] patch_binary')
