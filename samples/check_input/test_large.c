@@ -6,8 +6,9 @@
 static const char org_serial[] = "this_be_da_serial";
 char serial[] = "vjkq]`g]fc]qgpkcn";
 
-__attribute__((noinline))
-static int check_input(const char *s) {
+// __attribute__((noinline))
+// __attribute__((annotate("sc_virtualize")))
+inline static int check_input(const char *s) {
   int result = 0;
   for (int i = 0; i < sizeof(serial); ++i) {
     int shift = (s[i] - serial[i]) != 0;
@@ -16,8 +17,8 @@ static int check_input(const char *s) {
   return result;
 }
 
-__attribute__((noinline))
-static int transform_input(char *s) {
+// __attribute__((noinline))
+inline static int transform_input(char *s) {
   int len = strlen(s);
 	if (len == 0)
 		return -1;
@@ -28,6 +29,7 @@ static int transform_input(char *s) {
   return 0;
 }
 
+__attribute__((annotate("sc_virtualize")))
 int main(int argc, const char **argv) {
   char buf[21];
   scanf("%20s", buf);

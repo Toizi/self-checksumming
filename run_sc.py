@@ -17,6 +17,10 @@ tigress_options = {
     "flatten":  "Flatten",
 }
 
+scvirt_options = {
+    "virt":   "-scvirt",
+}
+
 ollvm_options = {
     "opaque":    "-bcf",
     "subst":     "-sub",
@@ -24,8 +28,9 @@ ollvm_options = {
 }
 
 obfuscation_options = ['none']
-obfuscation_options.extend(tigress_options.keys())
+# obfuscation_options.extend(tigress_options.keys())
 obfuscation_options.extend(ollvm_options.keys())
+obfuscation_options.extend(scvirt_options.keys())
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
@@ -111,6 +116,60 @@ def obfuscate_checker_src(obfuscations, build_dir):
 
     return rtlib_path
 
+def obfuscate_bc(obfuscations, build_dir, checker_bc):
+    ollvm_bin = os.path.join(SC_HOME, 'obfuscation/Obfuscator-LLVM/build/bin')
+    scvirt_opt = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/bin/opt')
+    scvirt_lib = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/lib/LLVMScVirt.so')
+
+    # no obfuscations specified, no need to obfuscate
+    if not obfuscations:
+        return checker_bc
+    
+    # scvirt,opaque,indir,scvirt
+    # => [[scvirt], [opaque, indir], [scvirt]]
+    log_dir = os.path.join(build_dir, 'obfuscate_checker_bc.log')
+    bc_input = checker_bc
+    checker_bc = os.path.join(build_dir, 'checker_obf.bc')
+    with open(log_dir, 'w') as log_dir_f:
+        # since scvirt/ollvm use opt/clang, apply every transformation
+        # individually (slower but easier. should be using the same in the end)
+        for obf in obfuscations:
+            # check for ollvm obfuscations
+            if obf in ollvm_options or obf == 'none':
+                transforms = [] if obf == 'none' else ['-mllvm', ollvm_options[obf]]
+                cmd = [os.path.join(ollvm_bin, 'clang'),
+                    '-o', checker_bc,
+                    '-c', '-emit-llvm',
+                    bc_input,
+                ]
+                cmd.extend(transforms)
+                print('running {} > {}'.format(' '.join(cmd), log_dir))
+                log_dir_f.write('obfuscation: {}\n'.format(obf))
+                success = run_cmd(cmd, log_dir_f)
+                if not success:
+                    print('obfuscate_checker_bc failed')
+                    return False
+                bc_input = checker_bc
+            elif obf in scvirt_options:
+                cmd = [ scvirt_opt,
+                    '-o', checker_bc,
+                    '-load', scvirt_lib,
+                    scvirt_options[obf],
+                    '-dump-file', os.path.join(build_dir, 'scvirt_stats.txt'),
+                    bc_input
+                ]
+                print('running {} > {}'.format(' '.join(cmd), log_dir))
+                log_dir_f.write('obfuscation: {}\n'.format(obf))
+                success = run_cmd(cmd, log_dir_f)
+                if not success:
+                    print('obfuscate_checker_bc failed')
+                    return False
+                bc_input = checker_bc
+            else:
+                print("unknown obfuscation option {}".format(obf))
+                return False
+
+    return checker_bc
 
 def obfuscate_checker_bc(obfuscations, build_dir, checker_bc):
     ollvm_bin = os.path.join(SC_HOME, 'obfuscation/Obfuscator-LLVM/build/bin')
@@ -119,7 +178,7 @@ def obfuscate_checker_bc(obfuscations, build_dir, checker_bc):
     if not obfuscations:
         return checker_bc
 
-    # check for tigress obfuscations
+    # check for ollvm obfuscations
     ollvm_obfs = set(ollvm_options.keys()) & set(obfuscations)
     if ollvm_obfs:
         org_checker = checker_bc
@@ -180,12 +239,13 @@ def patch_binary(args, build_dir, out_file):
     return True
 
 def run(args, build_dir):
-    if args.verbose:
-        print('[*] obfuscate_checker_src')
-    checker_file = obfuscate_checker_src(args.obfuscation, build_dir)
-    if not checker_file:
-        print('[-] obfuscate_checker_src')
-        return False
+    # if args.verbose:
+    #     print('[*] obfuscate_checker_src')
+    # checker_file = obfuscate_checker_src(args.obfuscation, build_dir)
+    # if not checker_file:
+    #     print('[-] obfuscate_checker_src')
+    #     return False
+    checker_file = os.path.join(SC_HOME, 'rtlib.c')
 
     if args.verbose:
         print('[*] compile_checker_to_bc')
@@ -194,12 +254,12 @@ def run(args, build_dir):
         print('[-] compile_checker_to_bc')
         return False
 
-    if args.verbose:
-        print('[*] obfuscate_checker_bc')
-    checker_bc = obfuscate_checker_bc(args.obfuscation, build_dir, checker_bc)
-    if not checker_bc:
-        print('[-] obfuscate_checker_bc')
-        return False
+    # if args.verbose:
+    #     print('[*] obfuscate_checker_bc')
+    # checker_bc = obfuscate_checker_bc(args.obfuscation, build_dir, checker_bc)
+    # if not checker_bc:
+    #     print('[-] obfuscate_checker_bc')
+    #     return False
 
     if args.verbose:
         print('[*] compile_source_to_bc')
@@ -216,8 +276,15 @@ def run(args, build_dir):
         return False
 
     if args.verbose:
+        print('[*] obfuscate_program_bc')
+    obf_checked_bc = obfuscate_bc(args.obfuscation, build_dir, checked_bc)
+    if not obf_checked_bc:
+        print('[-] obfuscate_program_bc')
+        return False
+
+    if args.verbose:
         print('[*] link')
-    out_file = link(args, checked_bc)
+    out_file = link(args, obf_checked_bc)
     if not out_file:
         print('[-] link')
         return False
@@ -239,12 +306,13 @@ def main(argv):
     args = parse_args(argv)
     setup_environment()
     build_dir  = tempfile.mkdtemp()
-    run(args, build_dir)
+    result = run(args, build_dir)
 
     if args.verbose:
         print('Done')
         print('Intermediate results in\n{}'.format(build_dir))
-    return True
+    return result
 
 if __name__ == '__main__':
-    main(os.sys.argv[1:])
+    if main(os.sys.argv[1:]) is not True:
+        exit(1)
