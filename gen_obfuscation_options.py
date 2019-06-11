@@ -9,7 +9,7 @@ def parse_args(argv):
     parser.add_argument("--min-length", help="the minimum length of the joined obfuscations", type=int, default=1)
     parser.add_argument("--max-length", help="the maximum length of the joined obfusactions", type=int, default=2)
     parser.add_argument("obfuscations", nargs='*', help="the obfuscation choices",
-        default=['flatten', 'virt', 'opaque', 'subst'])
+        default=['flatten', 'virt', 'opaque', 'subst', 'indir'])
     
     args = parser.parse_args(argv)
     if args.min_length > args.max_length:

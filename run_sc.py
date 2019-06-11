@@ -22,9 +22,10 @@ scvirt_options = {
 }
 
 ollvm_options = {
-    "opaque":    "-bcf",
-    "subst":     "-sub",
+    "opaque":    "-opaque-predicate",
+    "subst":     "-substitution",
     "indir":     "-cfg-indirect",
+    "flatten":   "-flattening",
 }
 
 obfuscation_options = ['none']
@@ -136,12 +137,14 @@ def obfuscate_bc(obfuscations, build_dir, checker_bc):
         for obf in obfuscations:
             # check for ollvm obfuscations
             if obf in ollvm_options or obf == 'none':
-                transforms = [] if obf == 'none' else ['-mllvm', ollvm_options[obf]]
-                cmd = [os.path.join(ollvm_bin, 'clang'),
+                transforms = [] if obf == 'none' else [ollvm_options[obf]]
+                cmd = [os.path.join(ollvm_bin, 'opt'),
                     '-o', checker_bc,
-                    '-c', '-emit-llvm',
+                    # '-c', '-emit-llvm',
                     bc_input,
                 ]
+                if obf == 'indir':
+                    cmd.append('-cfg-indirect-reg2mem')
                 cmd.extend(transforms)
                 print('running {} > {}'.format(' '.join(cmd), log_dir))
                 log_dir_f.write('obfuscation: {}\n'.format(obf))
