@@ -189,9 +189,10 @@ struct SCPass : public ModulePass
     bool didModify = false;
     std::vector<Function *> sensitiveFunctions,
         otherFunctions;
-    const auto &input_dependency_info =
-        getAnalysis<input_dependency::InputDependencyAnalysisPass>()
-            .getInputDependencyAnalysis();
+    // TMP_WORKAROUND
+    // const auto &input_dependency_info =
+    //     getAnalysis<input_dependency::InputDependencyAnalysisPass>()
+    //         .getInputDependencyAnalysis();
     auto *function_info =
         getAnalysis<FunctionMarkerPass>().get_functions_info();
     auto function_filter_info =
@@ -209,40 +210,44 @@ struct SCPass : public ModulePass
       if (F.isDeclaration() || F.empty() || F.getName() == CheckerFunctionName)
         continue;
 
-      countProcessedFuncs++;
-      auto F_input_dependency_info = input_dependency_info->getAnalysisInfo(&F);
+      sensitiveFunctions.push_back(&F);
+      continue;
 
-      // TODO: Why skipping such functions?
-      if (!F_input_dependency_info)
-      {
-        dbgs() << "Skipping function because it has no input dependency result "
-               << F.getName() << "\n";
-        continue;
-      }
-      bool isExtracted = F_input_dependency_info->isExtractedFunction();
-      bool isSensitive = ExtractedOnly ? isExtracted : true; //only extracted functions if ExtarctedOnly is set
-      //honor the filter function list
-      if (!function_filter_info->get_functions().empty() &&
-          !function_filter_info->is_function(&F))
-      {
-        isSensitive = false;
-      }
-      //ExtractedOnly flag enforces the usage of other functions, regardless of the UseOtherFunctions flag
-      if (ExtractedOnly && (!isExtracted))
-      {
-        dbgs() << "Adding " << F.getName() << " other functions, ExtractedOnly mode uses other functions\n";
-        otherFunctions.push_back(&F);
-      }
-      else if (!ExtractedOnly && UseOtherFunctions && !isSensitive)
-      {
-        dbgs() << "Adding " << F.getName() << " other functions, UseOtherFunctions mode\n";
-        otherFunctions.push_back(&F);
-      }
-      else if (isSensitive)
-      {
-        dbgs() << "Adding " << F.getName() << " to sensitive vector\n";
-        sensitiveFunctions.push_back(&F);
-      }
+      // TMP_WORKAROUND
+      // countProcessedFuncs++;
+      // auto F_input_dependency_info = input_dependency_info->getAnalysisInfo(&F);
+
+      // // TODO: Why skipping such functions?
+      // if (!F_input_dependency_info)
+      // {
+      //   dbgs() << "Skipping function because it has no input dependency result "
+      //          << F.getName() << "\n";
+      //   continue;
+      // }
+      // bool isExtracted = F_input_dependency_info->isExtractedFunction();
+      // bool isSensitive = ExtractedOnly ? isExtracted : true; //only extracted functions if ExtarctedOnly is set
+      // //honor the filter function list
+      // if (!function_filter_info->get_functions().empty() &&
+      //     !function_filter_info->is_function(&F))
+      // {
+      //   isSensitive = false;
+      // }
+      // //ExtractedOnly flag enforces the usage of other functions, regardless of the UseOtherFunctions flag
+      // if (ExtractedOnly && (!isExtracted))
+      // {
+      //   dbgs() << "Adding " << F.getName() << " other functions, ExtractedOnly mode uses other functions\n";
+      //   otherFunctions.push_back(&F);
+      // }
+      // else if (!ExtractedOnly && UseOtherFunctions && !isSensitive)
+      // {
+      //   dbgs() << "Adding " << F.getName() << " other functions, UseOtherFunctions mode\n";
+      //   otherFunctions.push_back(&F);
+      // }
+      // else if (isSensitive)
+      // {
+      //   dbgs() << "Adding " << F.getName() << " to sensitive vector\n";
+      //   sensitiveFunctions.push_back(&F);
+      // }
     }
 
     auto rng = std::default_random_engine{};
@@ -375,7 +380,7 @@ struct SCPass : public ModulePass
       auto &BB = F->getEntryBlock();
       auto I = BB.getFirstNonPHIOrDbg();
 
-      auto F_input_dependency_info = input_dependency_info->getAnalysisInfo(F);
+      // auto F_input_dependency_info = input_dependency_info->getAnalysisInfo(F);
       for (auto &Checkee : it->second)
       {
         // This is all for the sake of the stats
@@ -489,7 +494,8 @@ struct SCPass : public ModulePass
   void getAnalysisUsage(AnalysisUsage &AU) const override
   {
     AU.setPreservesAll();
-    AU.addRequired<input_dependency::InputDependencyAnalysisPass>();
+    // TMP_WORKAROUND
+    // AU.addRequired<input_dependency::InputDependencyAnalysisPass>();
     AU.addRequired<FunctionMarkerPass>();
     AU.addPreserved<FunctionMarkerPass>();
     AU.addRequired<FunctionFilterPass>();
@@ -505,7 +511,8 @@ struct SCPass : public ModulePass
     return r;
   }
   void appendToPatchGuide(const unsigned int length, const unsigned int address,
-                          const unsigned int expectedHash, const std::string &functionName)
+                          const unsigned int expectedHash, const std::string &functionName,
+                          const std::string &checkerName)
   {
     if (!guide_file)
     {
@@ -517,8 +524,8 @@ struct SCPass : public ModulePass
       }
     }
     std::string demangled_name = demangle_name(functionName);
-    fprintf(guide_file, "%s,%d,%d,%d\n", demangled_name.c_str(), address, length,
-            expectedHash);
+    fprintf(guide_file, "%s,%s,%d,%d,%d\n", demangle_name(checkerName).c_str(),
+            demangled_name.c_str(), address, length, expectedHash);
   }
 
   void setPatchMetadata(Instruction *Inst, const std::string &tag)
@@ -554,7 +561,8 @@ struct SCPass : public ModulePass
 
     dbgs() << "placeholder:" << address << " "
            << " size:" << length << " expected hash:" << expectedHash << "\n";
-    appendToPatchGuide(length, address, expectedHash, Checkee->getName());
+    appendToPatchGuide(length, address, expectedHash, Checkee->getName(),
+      BB->getParent()->getName());
     std::vector<llvm::Value *> args;
 
     auto *arg1 = llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), address);

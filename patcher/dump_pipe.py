@@ -114,7 +114,7 @@ def get_patches(input_file, guide_content, r2):
         size_placeholder = int(s[2])
         hash_placeholder = int(s[3])
         if target_func not in funcs:
-            target_func ='sym.'+target_func
+            target_func = 'sym.' + target_func
         if target_func in funcs:
         #Compute expected hashes
             
@@ -128,6 +128,9 @@ def get_patches(input_file, guide_content, r2):
                 'hash_target': 0 , 'dummy': False}
             patches.append(patch)
         else:
+            # required due to r2 bug that seeks to wrong function
+            # for some reason if af is not called before
+            r2.cmd('af ' + target_func)
             r2.cmd('s ' + target_func)
             funcinfo = r2.cmdj('afij')
             if funcinfo:

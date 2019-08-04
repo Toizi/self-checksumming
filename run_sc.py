@@ -6,11 +6,14 @@ import os
 import subprocess
 import shlex
 import traceback
+import json
 from run_tigress import main as tigress_main
 
 mydir = os.path.dirname(os.path.abspath(__file__))
 os.sys.path.append(os.path.join(mydir, 'patcher'))
-from dump_pipe import main as dump_main
+# from dump_pipe import main as dump_main
+ghidra_dump_path = os.path.join(mydir, 'patcher', 'ghidra_patch.py')
+ghidra_headless = 'analyzeHeadless'
 
 tigress_options = {
     "virt":     "Virtualize",
@@ -43,6 +46,8 @@ def parse_args(argv):
     parser.add_argument("-v", "--verbose", help="print debugging information",
                         action="store_true")
     parser.add_argument("-o", "--output", help="output path", required=False)
+    parser.add_argument("-bc", "--compile-bc", help="input file is bitcode", action="store_true", required=False)
+    parser.add_argument("--link-args", help="arguments that are passed to the linker", required=False)
     parser.add_argument("-con", "--connectivity", help="desired connectiviy of the checkers network", type=float, default=2)
     parser.add_argument("source_file")
     
@@ -90,7 +95,10 @@ def compile_source_to_bc(source_file, build_dir):
 
 def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc):
     checked_bc = os.path.join(build_dir, 'checked.bc')
-    cmd = '{opt} -load "{indep_path}/libInputDependency.so" -load "{util}" -load "{indep_path}/libTransforms.so" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -extract-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -checker-bitcode={checker} -o "{out}" "{src}"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc, checker=checker_bc)
+    # -load "{indep_path}/libInputDependency.so" 
+    # -load "{indep_path}/libTransforms.so" 
+    # -extract-functions 
+    cmd = '{opt} -load "{util}" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -use-other-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -checker-bitcode={checker} -o "{out}" "{src}"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc, checker=checker_bc)
 
     if not run_cmd(cmd):
         print("apply_selfchecking failed:\n   {}".format(cmd))
@@ -226,6 +234,8 @@ def link_checker_and_source(args, build_dir, source_bc, checker_bc):
 
 def link(args, checked_bc):
     cmd = "{linker} {source_file} -o {out}".format(linker=CLANG, source_file=checked_bc, out=args.output)
+    if args.link_args:
+        cmd += ' {}'.format(args.link_args)
     if args.verbose:
         print(cmd)
     if not run_cmd(cmd):
@@ -234,11 +244,51 @@ def link(args, checked_bc):
 
     return args.output
 
-def patch_binary(args, build_dir, out_file):
+def patch_binary_r2(args, build_dir, out_file):
     dump_args = '"{out_file}" --patch-guide="{build_dir}/patch_guide.txt" --patch-dump="{build_dir}/patches.txt" --sc-stats="{build_dir}/sc.stats" -v'.format(out_file=out_file, build_dir=build_dir)
+    if args.verbose:
+        print('patch_binary, args to dump_pipe: {}'.format(dump_args))
     if not dump_main(shlex.split(dump_args)):
         print('patch_binary failed')
         return False
+    return True
+
+def patch_binary_ghidra(args, build_dir, out_file):
+    patch_path = os.path.join(build_dir, 'patches.json')
+    dump_args = '"{out_file}" --patch-guide="{build_dir}/patch_guide.txt" --patch-dump="{patch_path}" --sc-stats="{build_dir}/sc.stats" -v'.format(out_file=out_file, build_dir=build_dir, patch_path=patch_path)
+    ghidra_cmd = [
+        ghidra_headless,
+        build_dir,     # project location
+        'tmp_project', # project name
+        '-import', out_file,
+        '-postscript', ghidra_dump_path,
+        dump_args
+    ]
+    if args.verbose:
+        print('patch_binary, args to launch ghidra: {}'.format(ghidra_cmd))
+    
+    if not run_cmd(ghidra_cmd):
+        print('patch_binary failed')
+        return False
+    
+    if args.verbose:
+        print('[*] patching binary with radare2')
+    # current workaround since ghidra breaks the headers when exporting a binary
+    # so use r2 for applying the patches
+    with open(patch_path, 'r') as f:
+        patches = json.load(f)
+
+    import r2pipe
+    r2 = r2pipe.open(out_file, ['-w'])
+    for patch in patches:
+        for patch_type in ('hash', 'size', 'hashtarget'):
+            patch_str = 'wx {} @ {:#x}'.format(patch['patch_{}_data'.format(patch_type)],
+                patch['patch_{}_addr'.format(patch_type)])
+            if args.verbose:
+                print('r2 execute: {}'.format(patch_str))
+            r2.cmd(patch_str)
+    r2.quit()
+    
     return True
 
 def run(args, build_dir):
@@ -264,12 +314,17 @@ def run(args, build_dir):
     #     print('[-] obfuscate_checker_bc')
     #     return False
 
-    if args.verbose:
-        print('[*] compile_source_to_bc')
-    source_bc = compile_source_to_bc(args.source_file, build_dir)
-    if not source_bc:
-        print('[-] compile_source_to_bc')
-        return False
+    if args.compile_bc:
+        if args.verbose:
+            print('[*] skipping compile_source_to_bc since input file is bitcode already')
+        source_bc = args.source_file
+    else:
+        if args.verbose:
+            print('[*] compile_source_to_bc')
+        source_bc = compile_source_to_bc(args.source_file, build_dir)
+        if not source_bc:
+            print('[-] compile_source_to_bc')
+            return False
 
     if args.verbose:
         print('[*] apply_selfchecking')
@@ -300,7 +355,7 @@ def run(args, build_dir):
 
     if args.verbose:
         print('[*] patch_binary')
-    if not patch_binary(args, build_dir, out_file):
+    if not patch_binary_ghidra(args, build_dir, out_file):
         print('[-] patch_binary')
         return False
     return True
