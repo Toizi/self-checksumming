@@ -5,6 +5,7 @@ import tempfile
 import os
 import subprocess
 import shlex
+import shutil
 import traceback
 import json
 from run_tigress import main as tigress_main
@@ -46,15 +47,24 @@ def parse_args(argv):
     parser.add_argument("-v", "--verbose", help="print debugging information",
                         action="store_true")
     parser.add_argument("-o", "--output", help="output path", required=False)
+    parser.add_argument("--build-dir", help="output path", required=False)
     parser.add_argument("-bc", "--compile-bc", help="input file is bitcode", action="store_true", required=False)
+    parser.add_argument("--checked-functions", help="comma separated list of functions to be protected", required=False)
     parser.add_argument("--link-args", help="arguments that are passed to the linker", required=False)
-    parser.add_argument("-con", "--connectivity", help="desired connectiviy of the checkers network", type=float, default=2)
+    parser.add_argument("--to-bitcode", help="only apply checking/obfuscation but do not link", action="store_true", required=False)
+    parser.add_argument("--patch-only", help="only patch the binary", action="store_true", required=False)
+    parser.add_argument("-con", "--connectivity", help="desired connectiviy of the checkers network", type=int, default=2)
     parser.add_argument("source_file")
     
     args = parser.parse_args(argv)
 
+    if args.patch_only:
+        if not args.build_dir:
+            print("[-] --patch-only requires setting --build-dir")
     if not args.output:
         args.output, _ = os.path.splitext(args.source_file)
+        if args.output == args.source_file:
+            args.output += '_patched'
     return args
 
 def setup_environment():
@@ -93,12 +103,20 @@ def compile_source_to_bc(source_file, build_dir):
         return False
     return source_bc
 
-def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc):
+def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str):
     checked_bc = os.path.join(build_dir, 'checked.bc')
     # -load "{indep_path}/libInputDependency.so" 
     # -load "{indep_path}/libTransforms.so" 
     # -extract-functions 
-    cmd = '{opt} -load "{util}" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -use-other-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -checker-bitcode={checker} -o "{out}" "{src}"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc, checker=checker_bc)
+    if checked_functions_str:
+        checked_functions = checked_functions_str.split(',')
+        checked_functions_path = os.path.join(build_dir, 'checked_functions.txt')
+        with open(checked_functions_path, 'w') as f:
+            f.write('\n'.join(checked_functions))
+        filter_str = '-filter-file="{}"'.format(checked_functions_path)
+    else:
+        filter_str = ''
+    cmd = '{opt} -load "{util}" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -use-other-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -checker-bitcode={checker} {filter_cmd} -o "{out}" "{src}"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc, checker=checker_bc, filter_cmd=filter_str)
 
     if not run_cmd(cmd):
         print("apply_selfchecking failed:\n   {}".format(cmd))
@@ -298,54 +316,66 @@ def run(args, build_dir):
     # if not checker_file:
     #     print('[-] obfuscate_checker_src')
     #     return False
-    checker_file = os.path.join(SC_HOME, 'rtlib.c')
 
-    if args.verbose:
-        print('[*] compile_checker_to_bc')
-    checker_bc = compile_checker_to_bc(build_dir, checker_file)
-    if not checker_bc:
-        print('[-] compile_checker_to_bc')
-        return False
-
-    # if args.verbose:
-    #     print('[*] obfuscate_checker_bc')
-    # checker_bc = obfuscate_checker_bc(args.obfuscation, build_dir, checker_bc)
-    # if not checker_bc:
-    #     print('[-] obfuscate_checker_bc')
-    #     return False
-
-    if args.compile_bc:
-        if args.verbose:
-            print('[*] skipping compile_source_to_bc since input file is bitcode already')
-        source_bc = args.source_file
+    # if we shall only patch a binary we have to copy it first
+    if args.patch_only:
+        shutil.copyfile(args.source_file, args.output)
+        out_file = args.output
     else:
+        checker_file = os.path.join(SC_HOME, 'rtlib.c')
+
         if args.verbose:
-            print('[*] compile_source_to_bc')
-        source_bc = compile_source_to_bc(args.source_file, build_dir)
-        if not source_bc:
-            print('[-] compile_source_to_bc')
+            print('[*] compile_checker_to_bc')
+        checker_bc = compile_checker_to_bc(build_dir, checker_file)
+        if not checker_bc:
+            print('[-] compile_checker_to_bc')
             return False
 
-    if args.verbose:
-        print('[*] apply_selfchecking')
-    checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc, checker_bc)
-    if not checked_bc:
-        print('[-] apply_selfchecking')
-        return False
+        # if args.verbose:
+        #     print('[*] obfuscate_checker_bc')
+        # checker_bc = obfuscate_checker_bc(args.obfuscation, build_dir, checker_bc)
+        # if not checker_bc:
+        #     print('[-] obfuscate_checker_bc')
+        #     return False
 
-    if args.verbose:
-        print('[*] obfuscate_program_bc')
-    obf_checked_bc = obfuscate_bc(args.obfuscation, build_dir, checked_bc)
-    if not obf_checked_bc:
-        print('[-] obfuscate_program_bc')
-        return False
+        if args.compile_bc:
+            if args.verbose:
+                print('[*] skipping compile_source_to_bc since input file is bitcode already')
+            source_bc = args.source_file
+        else:
+            if args.verbose:
+                print('[*] compile_source_to_bc')
+            source_bc = compile_source_to_bc(args.source_file, build_dir)
+            if not source_bc:
+                print('[-] compile_source_to_bc')
+                return False
 
-    if args.verbose:
-        print('[*] link')
-    out_file = link(args, obf_checked_bc)
-    if not out_file:
-        print('[-] link')
-        return False
+        if args.verbose:
+            print('[*] apply_selfchecking')
+        checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc, checker_bc, args.checked_functions)
+        if not checked_bc:
+            print('[-] apply_selfchecking')
+            return False
+
+        if args.verbose:
+            print('[*] obfuscate_program_bc')
+        obf_checked_bc = obfuscate_bc(args.obfuscation, build_dir, checked_bc)
+        if not obf_checked_bc:
+            print('[-] obfuscate_program_bc')
+            return False
+
+        if args.verbose:
+            print('[*] link')
+        if args.to_bitcode:
+            shutil.copyfile(obf_checked_bc, args.output)
+            print('[*] --to-bitcode specified, skipping link + patching')
+            print('[*] to patch the file after manually linking:')
+            print('    {} --patch-only --build-dir "{build_dir}"'.format(__file__, build_dir=build_dir))
+            return True
+        out_file = link(args, obf_checked_bc)
+        if not out_file:
+            print('[-] link')
+            return False
     # if args.verbose:
     #     print('[*] link_checker_and_source')
     # out_file = link_checker_and_source(args, build_dir, checked_bc, checker_bc)
@@ -363,7 +393,7 @@ def run(args, build_dir):
 def main(argv):
     args = parse_args(argv)
     setup_environment()
-    build_dir  = tempfile.mkdtemp()
+    build_dir = args.build_dir if args.build_dir else tempfile.mkdtemp()
     result = run(args, build_dir)
 
     if args.verbose:
