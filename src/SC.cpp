@@ -210,8 +210,6 @@ struct SCPass : public ModulePass
       if (F.isDeclaration() || F.empty() || F.getName() == CheckerFunctionName)
         continue;
 
-      sensitiveFunctions.push_back(&F);
-      continue;
 
       // TMP_WORKAROUND
       // countProcessedFuncs++;
@@ -227,11 +225,12 @@ struct SCPass : public ModulePass
       // bool isExtracted = F_input_dependency_info->isExtractedFunction();
       // bool isSensitive = ExtractedOnly ? isExtracted : true; //only extracted functions if ExtarctedOnly is set
       // //honor the filter function list
-      // if (!function_filter_info->get_functions().empty() &&
-      //     !function_filter_info->is_function(&F))
-      // {
-      //   isSensitive = false;
-      // }
+      if (!function_filter_info->is_function(&F))
+      {
+        otherFunctions.push_back(&F);
+        continue;
+      }
+      sensitiveFunctions.push_back(&F);
       // //ExtractedOnly flag enforces the usage of other functions, regardless of the UseOtherFunctions flag
       // if (ExtractedOnly && (!isExtracted))
       // {
@@ -523,9 +522,12 @@ struct SCPass : public ModulePass
         exit(1);
       }
     }
-    std::string demangled_name = demangle_name(functionName);
-    fprintf(guide_file, "%s,%s,%d,%d,%d\n", demangle_name(checkerName).c_str(),
-            demangled_name.c_str(), address, length, expectedHash);
+    // std::string demangled_name = demangle_name(functionName);
+    fprintf(guide_file, "%s,%s,%d,%d,%d\n",
+            checkerName.c_str(),
+            // demangle_name(checkerName).c_str(),
+            functionName.c_str(), address, length, expectedHash);
+            // demangled_name.c_str(), address, length, expectedHash);
   }
 
   void setPatchMetadata(Instruction *Inst, const std::string &tag)
