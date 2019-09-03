@@ -139,6 +139,11 @@ def find_function(func_name):
     return func
 
 def get_function_size(func):
+    # TODO: since disassembly might fail through obfuscation and therefore
+    # the function might only contain some of the basic blocks at the beginning,
+    # add the option to compute the size by
+    # getNextFunction().getEntryPoint() - getMinAddress()
+    # this assumes that all functions are laid out linearly and not thunked
     body = func.getBody()
     return body.getMaxAddress().getOffset() - body.getMinAddress().getOffset()
 
