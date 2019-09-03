@@ -49,6 +49,7 @@ def parse_args(argv):
     parser.add_argument("-o", "--output", help="output path", required=False)
     parser.add_argument("--build-dir", help="output path", required=False)
     parser.add_argument("-bc", "--compile-bc", help="input file is bitcode", action="store_true", required=False)
+    parser.add_argument("-cpp", "--compile-cpp", help="use clang++ instead of clang", action="store_true", required=False)
     parser.add_argument("--checked-functions", help="comma separated list of functions to be protected", required=False)
     parser.add_argument("--link-args", help="arguments that are passed to the linker", required=False)
     parser.add_argument("--to-bitcode", help="only apply checking/obfuscation but do not link", action="store_true", required=False)
@@ -251,7 +252,7 @@ def link_checker_and_source(args, build_dir, source_bc, checker_bc):
     return args.output
 
 def link(args, checked_bc):
-    cmd = "{linker} {source_file} -o {out}".format(linker=CLANG, source_file=checked_bc, out=args.output)
+    cmd = "{linker} {source_file} -o {out}".format(linker=CLANGPP if args.compile_cpp else CLANG, source_file=checked_bc, out=args.output)
     if args.link_args:
         cmd += ' {}'.format(args.link_args)
     if args.verbose:
