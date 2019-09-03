@@ -583,20 +583,23 @@ struct SCPass : public ModulePass
       auto *A = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "a");
       auto *B = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "b");
       auto *C = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "c");
-      auto *store1 = builder.CreateStore(arg1, A, /*isVolatile=*/false);
+      // make instructions volatile to stop optimizations from removing/folding
+      // the values that we need to patch after linking
+      bool isVolatile = true;
+      auto *store1 = builder.CreateStore(arg1, A, /*isVolatile=*/isVolatile);
       store1->setMetadata(sc_guard_str, sc_guard_md);
       // setPatchMetadata(store1, "address");
-      auto *store2 = builder.CreateStore(arg2, B, /*isVolatile=*/false);
+      auto *store2 = builder.CreateStore(arg2, B, /*isVolatile=*/isVolatile);
       store2->setMetadata(sc_guard_str, sc_guard_md);
       // setPatchMetadata(store2, "length");
-      auto *store3 = builder.CreateStore(arg3, C, /*isVolatile=*/false);
+      auto *store3 = builder.CreateStore(arg3, C, /*isVolatile=*/isVolatile);
       store3->setMetadata(sc_guard_str, sc_guard_md);
       // setPatchMetadata(store3, "hash");
-      auto *load1 = builder.CreateLoad(A);
+      auto *load1 = builder.CreateLoad(A, isVolatile);
       load1->setMetadata(sc_guard_str, sc_guard_md);
-      auto *load2 = builder.CreateLoad(B);
+      auto *load2 = builder.CreateLoad(B, isVolatile);
       load2->setMetadata(sc_guard_str, sc_guard_md);
-      auto *load3 = builder.CreateLoad(C);
+      auto *load3 = builder.CreateLoad(C, isVolatile);
       load3->setMetadata(sc_guard_str, sc_guard_md);
       args.push_back(load1);
       args.push_back(load2);
