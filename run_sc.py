@@ -22,14 +22,29 @@ tigress_options = {
 }
 
 scvirt_options = {
-    "virt":   "-scvirt",
+    "virt":   {
+        "pass_name": "-scvirt",
+        "coverage_name": "-scvirt-ratio"
+    }
 }
 
 ollvm_options = {
-    "opaque":    "-opaque-predicate",
-    "subst":     "-substitution",
-    "indir":     "-cfg-indirect",
-    "flatten":   "-flattening",
+    "opaque":    {
+        "pass_name": "-opaque-predicate",
+        "coverage_name": "-opaque-ratio"
+    },
+    "subst": {
+        "pass_name": "-substitution",
+        "coverage_name": "-substitution-ratio"
+    },
+    "indir": {
+        "pass_name": "-cfg-indirect",
+        "coverage_name": "-cfg-indirect-ratio"
+    },
+    "flatten": {
+        "pass_name": "-flattening",
+        "coverage_name": "-flatten-ratio"
+    },
 }
 
 obfuscation_options = ['none']
@@ -41,9 +56,14 @@ def parse_args(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--compile", help="compile only and produce an object file",
                         action="store_true")
-    parser.add_argument("-ob", "--obfuscation", choices=obfuscation_options,
+    parser.add_argument("-ob", "--obfuscation",
                         action='append',
-                        help="obfuscation transformations used on the checker function")
+                        help='\n'.join(
+                            ["obfuscation transformations used on the checker function.",
+                            "format is obf_name.coverage.",
+                            "E.g. indir.10 to obfuscate 10% of the functions",
+                            "in addition to the checker functions since these will always be obfuscated",
+                            "Options are: {}".format(', '.join(obfuscation_options))]))
     parser.add_argument("-v", "--verbose", help="print debugging information",
                         action="store_true")
     parser.add_argument("-o", "--output", help="output path", required=False)
@@ -104,7 +124,7 @@ def compile_source_to_bc(source_file, build_dir):
         return False
     return source_bc
 
-def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str):
+def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str, checker_functions_path):
     checked_bc = os.path.join(build_dir, 'checked.bc')
     # -load "{indep_path}/libInputDependency.so" 
     # -load "{indep_path}/libTransforms.so" 
@@ -114,14 +134,59 @@ def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_f
         checked_functions_path = os.path.join(build_dir, 'checked_functions.txt')
         with open(checked_functions_path, 'w') as f:
             f.write('\n'.join(checked_functions))
-        filter_str = '-filter-file="{}"'.format(checked_functions_path)
+        filter_cmd = ['-filter-file', checked_functions_path]
     else:
-        filter_str = ''
-    cmd = '{opt} -load "{util}" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -use-other-functions -sc -connectivity={con} -dump-checkers-network="{build_dir}/network_file" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -checker-bitcode={checker} {filter_cmd} -o "{out}" "{src}"'.format(opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD, con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc, checker=checker_bc, filter_cmd=filter_str)
+        filter_cmd = []
+    # cmd = '{opt} -load "{util}" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -use-other-functions -sc -connectivity={con} -dump-checkers-network="{checker_network}" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -checker-bitcode={checker} {filter_cmd} -o "{out}" "{src}"'.format(
+    #         opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD,
+    #         con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc,
+    #         checker=checker_bc, filter_cmd=filter_cmd,
+    #         checker_network=checker_network_path)
+    patch_guide_path = '{}/patch_guide.txt'.format(build_dir)
+    cmd = [
+        OPT,
+        '-load', UTILLIB,
+        '-load', '{}/lib/libSCPass.so'.format(SC_BUILD),
+        '-strip-debug', '-unreachableblockelim', '-globaldce',
+        '-use-other-functions', '-sc', '-connectivity={}'.format(connectivity),
+        '-dump-checkers-network', '{}/network_file'.format(build_dir),
+        '-patch-guide', patch_guide_path,
+        '-dump-sc-stat', '{}/sc.stats'.format(build_dir),
+        '-checker-bitcode', checker_bc,
+        '-o', checked_bc,
+        source_bc,
+        # using O3 directly somehow leads to opt crashing
+        # therefore we call opt with just O3 after adding the self-checking
+        # '-O3'
+    ]
+    if filter_cmd:
+        cmd.extend(filter_cmd)
 
+    # run the command
     if not run_cmd(cmd):
         print("apply_selfchecking failed:\n   {}".format(cmd))
         return False
+    # run optimizations
+    if not run_cmd([OPT, '-O3', checked_bc, '-o', checked_bc]):
+        print("apply_selfchecking optimization failed")
+        return False
+    
+    # read the patch guide and get all of the functions containing checkers
+    with open(patch_guide_path, 'r') as f:
+        patches = f.readlines()
+    
+    checker_functions = []
+    for patch in patches:
+        # patch has the format
+        # checkerFunction, checkedFunction, placeholder1, placeholder2, placeholder3
+        func_name = patch.partition(',')[0]
+        checker_functions.append(func_name)
+
+    # write them to a file so they can be consumed by the FilterFunctionPass
+    # to whitelist them for obfuscations
+    with open(checker_functions_path, 'w') as f:
+        f.write('\n'.join(checker_functions))
+
     return checked_bc
 
 def obfuscate_checker_src(obfuscations, build_dir):
@@ -144,7 +209,7 @@ def obfuscate_checker_src(obfuscations, build_dir):
 
     return rtlib_path
 
-def obfuscate_bc(obfuscations, build_dir, checker_bc):
+def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path):
     ollvm_bin = os.path.join(SC_HOME, 'obfuscation/Obfuscator-LLVM/build/bin')
     scvirt_opt = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/bin/opt')
     scvirt_lib = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/lib/LLVMScVirt.so')
@@ -155,44 +220,59 @@ def obfuscate_bc(obfuscations, build_dir, checker_bc):
     
     # scvirt,opaque,indir,scvirt
     # => [[scvirt], [opaque, indir], [scvirt]]
-    log_dir = os.path.join(build_dir, 'obfuscate_checker_bc.log')
+    log_dir = os.path.join(build_dir, 'obfuscate_bc.log')
     bc_input = checker_bc
     checker_bc = os.path.join(build_dir, 'checker_obf.bc')
     with open(log_dir, 'w') as log_dir_f:
         # since scvirt/ollvm use opt/clang, apply every transformation
         # individually (slower but easier. should be using the same in the end)
         for obf in obfuscations:
+            obf_dissected = obf.split('.')
+            if len(obf_dissected) > 1:
+                assert(len(obf_dissected) == 2)
+                coverage = int(obf_dissected[1])
+            else:
+                coverage = 10
+            obf = obf_dissected[0]
+
+
             # check for ollvm obfuscations
             if obf in ollvm_options or obf == 'none':
-                transforms = [] if obf == 'none' else [ollvm_options[obf]]
+                # TODO: check whether subst obfuscation is working, i.e. what it even does
+                transforms = [] if obf == 'none' else [ollvm_options[obf]['pass_name']]
+                coverages = [] if obf == 'none' else [ollvm_options[obf]['coverage_name'],
+                    str(round(float(coverage)/100, 2))]
                 cmd = [os.path.join(ollvm_bin, 'opt'),
                     '-o', checker_bc,
                     # '-c', '-emit-llvm',
+                    '-filter-file', checker_functions_path,
                     bc_input,
                 ]
                 if obf == 'indir':
                     cmd.append('-cfg-indirect-reg2mem')
                 cmd.extend(transforms)
+                cmd.extend(coverages)
                 print('running {} > {}'.format(' '.join(cmd), log_dir))
                 log_dir_f.write('obfuscation: {}\n'.format(obf))
                 success = run_cmd(cmd, log_dir_f)
                 if not success:
-                    print('obfuscate_checker_bc failed')
+                    print('obfuscate_bc failed')
                     return False
                 bc_input = checker_bc
             elif obf in scvirt_options:
                 cmd = [ scvirt_opt,
                     '-o', checker_bc,
                     '-load', scvirt_lib,
-                    scvirt_options[obf],
+                    scvirt_options[obf]['pass_name'],
                     '-dump-file', os.path.join(build_dir, 'scvirt_stats.txt'),
+                    '-filter-file', checker_functions_path,
                     bc_input
                 ]
                 print('running {} > {}'.format(' '.join(cmd), log_dir))
                 log_dir_f.write('obfuscation: {}\n'.format(obf))
                 success = run_cmd(cmd, log_dir_f)
                 if not success:
-                    print('obfuscate_checker_bc failed')
+                    print('obfuscate_bc failed')
                     return False
                 bc_input = checker_bc
             else:
@@ -353,14 +433,17 @@ def run(args, build_dir):
 
         if args.verbose:
             print('[*] apply_selfchecking')
-        checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc, checker_bc, args.checked_functions)
+
+        checker_functions_path = '{}/checker_functions.txt'.format(build_dir)
+        checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc,
+            checker_bc, args.checked_functions, checker_functions_path)
         if not checked_bc:
             print('[-] apply_selfchecking')
             return False
 
         if args.verbose:
             print('[*] obfuscate_program_bc')
-        obf_checked_bc = obfuscate_bc(args.obfuscation, build_dir, checked_bc)
+        obf_checked_bc = obfuscate_bc(args.obfuscation, build_dir, checked_bc, checker_functions_path)
         if not obf_checked_bc:
             print('[-] obfuscate_program_bc')
             return False
