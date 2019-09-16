@@ -18,6 +18,7 @@ void guardMe(const unsigned int address, const unsigned int length, const unsign
 	//type of begin address that we are reading each time, 
 	//otherwise it falls out of the scope (see #3)
 //	printf("%sLength:%d Begin address:%d Expectedhash:%d\n",KRED,length,address,expectedHash);
+	#pragma clang loop vectorize(disable)
 	while (visited < length) {
 //		printf("%x ",*beginAddress);
 		hash ^= *beginAddress++;
@@ -28,21 +29,22 @@ void guardMe(const unsigned int address, const unsigned int length, const unsign
 //	printf("%sruntime hash: %x\n",KGRN,hash);
 //	printf("%sexpected hash: %x\n",KBLU,expectedHash);
 //	printf("%s",KNRM);
-	
+	// printf("hash: %#hhx\n", hash);
 	if (hash !=(unsigned char)expectedHash) {
 		//response();
-		printf("%sTampered binary!\n",KNRM);
+		printf("%sTampered binary!, expected != computed (%#x != %#hhx) \n",
+			KNRM, expectedHash, hash);
 
-		void* callstack[128];
-                int i, frames = backtrace(callstack, 128);
-                char** strs = backtrace_symbols(callstack, frames);
-    
+		// void* callstack[128];
+		// int i, frames = backtrace(callstack, 128);
+		// char** strs = backtrace_symbols(callstack, frames);
 
-                for (i = 0; i < frames; ++i) {
-                        printf("%s\n", strs[i]);
-                }   
 
-                free(strs);
+		// for (i = 0; i < frames; ++i) {
+		// 		printf("%s\n", strs[i]);
+		// }   
+
+		// free(strs);
 	}
 }
 //void respone(){
