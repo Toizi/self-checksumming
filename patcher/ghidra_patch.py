@@ -33,15 +33,24 @@ def find_placeholder_sequential(mm,start_index,struct_flag, search_value):
     return addr
 
 def find_placeholder(struct_flag, func, search_value):
-    # build a search string for findBytes
-    # 0x1337 => r'\x13\x37'
-    hex_val = hexlify(struct.pack(struct_flag, search_value))
-    search_str = ''.join(['\\x' + hex_val[i:i+2] for i in range(0, len(hex_val), 2)])
+    # # flat api call
+    # # build a search string for findBytes
+    # # 0x1337 => r'\x13\x37'
+    # hex_val = hexlify(struct.pack(struct_flag, search_value))
+    # search_str = ''.join(['\\x' + hex_val[i:i+2] for i in range(0, len(hex_val), 2)])
+    # addr = findBytes(func.getBody(), search_str, 1, 1)
+    # if not addr:
+    #     return None
+    # return addr[0].getOffset()
 
-    addr = findBytes(func.getBody(), search_str, 1, 1)
+    # full api call
+    search_val = struct.pack(struct_flag, search_value)
+    addr = currentProgram.memory.findBytes(func.getEntryPoint(),
+        toAddr(func.getEntryPoint().getOffset() + get_function_size(func) - 1),
+        bytes(search_val), None, True, None)
     if not addr:
         return None
-    return addr[0].getOffset()
+    return addr.getOffset()
 
 def patch_address(addr, patch_value):
     instr = getInstructionContaining(toAddr(addr))
@@ -142,10 +151,14 @@ def get_function_size(func):
     # TODO: since disassembly might fail through obfuscation and therefore
     # the function might only contain some of the basic blocks at the beginning,
     # add the option to compute the size by
-    # getNextFunction().getEntryPoint() - getMinAddress()
+    # getFunctionAfter().getEntryPoint() - getMinAddress()
     # this assumes that all functions are laid out linearly and not thunked
-    body = func.getBody()
-    return body.getMaxAddress().getOffset() - body.getMinAddress().getOffset()
+
+    # # old and "correct" code
+    # body = func.getBody()
+    # return body.getMaxAddress().getOffset() - body.getMinAddress().getOffset()
+    next_func = getFunctionAfter(func)
+    return next_func.getEntryPoint().getOffset() - func.getBody().getMinAddress().getOffset()
 
 def get_patches(input_file, guide_content):
         
