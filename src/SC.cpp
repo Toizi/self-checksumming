@@ -45,6 +45,12 @@ static cl::opt<int> DesiredConnectivity(
     cl::desc(
         "The desired level of connectivity of checkers node in the network "));
 
+static cl::opt<int> ScSeed(
+    "sc-seed", cl::Hidden,
+    cl::desc(
+        "The seed to use for the random selection of checkers/checkees"),
+    llvm::cl::init(1337));
+
 static cl::opt<int> MaximumPercOtherFunctions(
     "maximum-other-percentage", cl::Hidden,
     cl::desc("The maximum usage percentage (between 0 and 100) of other functions (beyond the filter set) that should be also "
@@ -249,7 +255,7 @@ struct SCPass : public ModulePass
       // }
     }
 
-    auto rng = std::default_random_engine{};
+    auto rng = std::default_random_engine{ScSeed.getValue()};
 
     dbgs() << "Sensitive functions:" << sensitiveFunctions.size()
            << " other functions:" << otherFunctions.size() << "\n";
@@ -336,7 +342,7 @@ struct SCPass : public ModulePass
                               sensitiveFunctions.end());
       }
       checkerFuncMap = checkerNetwork.constructProtectionNetwork(
-          sensitiveFunctions, otherFunctions, DesiredConnectivity);
+          sensitiveFunctions, otherFunctions, DesiredConnectivity, ScSeed.getValue());
       topologicalSortFuncs = checkerNetwork.getReverseTopologicalSort(checkerFuncMap);
       dbgs() << "Constructed the network of checkers!\n";
       if (SensitiveOnlyChecked || ExtractedOnly)

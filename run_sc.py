@@ -75,6 +75,8 @@ def parse_args(argv):
     parser.add_argument("--to-bitcode", help="only apply checking/obfuscation but do not link", action="store_true", required=False)
     parser.add_argument("--patch-only", help="only patch the binary", action="store_true", required=False)
     parser.add_argument("-con", "--connectivity", help="desired connectiviy of the checkers network", type=int, default=2)
+    parser.add_argument("--seed", help="the seed value to pass to self-checking and obfuscations",
+        type=int, default=1337, required=True)
     parser.add_argument("source_file")
     
     args = parser.parse_args(argv)
@@ -124,7 +126,7 @@ def compile_source_to_bc(source_file, build_dir):
         return False
     return source_bc
 
-def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str, checker_functions_path):
+def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str, checker_functions_path, seed):
     checked_bc = os.path.join(build_dir, 'checked.bc')
     # -load "{indep_path}/libInputDependency.so" 
     # -load "{indep_path}/libTransforms.so" 
@@ -152,6 +154,7 @@ def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_f
         '-dump-checkers-network', '{}/network_file'.format(build_dir),
         '-patch-guide', patch_guide_path,
         '-dump-sc-stat', '{}/sc.stats'.format(build_dir),
+        '-sc-seed', str(seed),
         '-checker-bitcode', checker_bc,
         '-o', checked_bc,
         source_bc,
@@ -212,7 +215,7 @@ def obfuscate_checker_src(obfuscations, build_dir):
 
     return rtlib_path
 
-def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path):
+def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path, seed):
     ollvm_bin = os.path.join(SC_HOME, 'obfuscation/Obfuscator-LLVM/build/bin')
     scvirt_opt = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/bin/opt')
     scvirt_lib = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/lib/LLVMScVirt.so')
@@ -248,6 +251,7 @@ def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path):
                 cmd = [os.path.join(ollvm_bin, 'opt'),
                     '-o', checker_bc,
                     # '-c', '-emit-llvm',
+                    '-rng-seed', str(seed),
                     '-filter-file', checker_functions_path,
                     bc_input,
                 ]
@@ -265,6 +269,7 @@ def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path):
             elif obf in scvirt_options:
                 cmd = [ scvirt_opt,
                     '-o', checker_bc,
+                    '-rng-seed', str(seed),
                     '-load', scvirt_lib,
                     scvirt_options[obf]['pass_name'],
                     '-dump-file', os.path.join(build_dir, 'scvirt_stats.txt'),
@@ -440,14 +445,14 @@ def run(args, build_dir):
 
         checker_functions_path = '{}/checker_functions.txt'.format(build_dir)
         checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc,
-            checker_bc, args.checked_functions, checker_functions_path)
+            checker_bc, args.checked_functions, checker_functions_path, args.seed)
         if not checked_bc:
             print('[-] apply_selfchecking')
             return False
 
         if args.verbose:
             print('[*] obfuscate_program_bc')
-        obf_checked_bc = obfuscate_bc(args.obfuscation, build_dir, checked_bc, checker_functions_path)
+        obf_checked_bc = obfuscate_bc(args.obfuscation, build_dir, checked_bc, checker_functions_path, args.seed)
         if not obf_checked_bc:
             print('[-] obfuscate_program_bc')
             return False

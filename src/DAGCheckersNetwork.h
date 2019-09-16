@@ -29,7 +29,7 @@ protected:
   // int AllFunctions;
   bool accept_lower_connectivity = false;
 public:
-  std::map<Function *, std::vector<Function *>> constructProtectionNetwork(std::vector<Function *> sensitiveFunctions,std::vector<Function *> checkerFunctions, int connectivity);
+  std::map<Function *, std::vector<Function *>> constructProtectionNetwork(std::vector<Function *> sensitiveFunctions,std::vector<Function *> checkerFunctions, int connectivity, int seed);
   void dumpJson(const std::map<Function *, std::vector<Function *>>,
                 std::string filePath,
                 const std::list<Function *> reverseTopologicalSort);

@@ -135,11 +135,11 @@ std::list<Function*> DAGCheckersNetwork::getReverseTopologicalSort(std::map<Func
 }
 
 std::vector<Function *> randomComb(int connectivity,
-                                   std::vector<Function *> allFunctions) {
+                                   std::vector<Function *> allFunctions, int seed) {
   std::vector<unsigned int> indices(allFunctions.size());
   std::iota(indices.begin(), indices.end(), 0);
 
-  auto rng = std::default_random_engine{};
+  auto rng = std::default_random_engine{seed};
   std::shuffle(indices.begin(), indices.end(), rng);
   std::vector<Function *> premutation;
   if (connectivity > allFunctions.size())
@@ -155,7 +155,7 @@ std::vector<Function *> randomComb(int connectivity,
 std::map<Function *, std::vector<Function *>>
 DAGCheckersNetwork::constructProtectionNetwork(
     std::vector<Function *> sensitiveFunctions,
-    std::vector<Function *> checkerFunctions, int connectivity) {
+    std::vector<Function *> checkerFunctions, int connectivity, int seed) {
 
   std::map<Function *, std::vector<Function *>> checkeeChecker;
   std::map<Function *, std::vector<Function *>> checkerCheckee;
@@ -191,7 +191,7 @@ DAGCheckersNetwork::constructProtectionNetwork(
         possibleCheckees.end());
     }*/
 
-    checkeeChecker[F] = randomComb(c, availableCheckers);
+    checkeeChecker[F] = randomComb(c, availableCheckers, seed);
     //if(checkeeChecker[F].size()!=c)
     errs()<<"C is set to "<<c<<" while size of checkees for "<<F->getName()<<" is "<<checkeeChecker[F].size()<<"\n";
     //exit(1);

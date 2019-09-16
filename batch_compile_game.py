@@ -46,6 +46,8 @@ def parse_args(argv):
         help="only print the commands to compile but do not execute them")
     parser.add_argument("-g", "--game", help="the game to compile", type=str,
         choices=(games.keys()), required=True)
+    parser.add_argument("--seeds", help="comma separated list of seeds to use",
+        type=str, default="1", required=False)
     parser.add_argument("-con", "--connectivity",
         help="desired connectiviy of the checkers network",
         type=int, default=10)
@@ -66,6 +68,8 @@ def parse_args(argv):
     # make sure directory ends with separator to allow globbing
     if args.input_dir[-1] != os.path.sep:
         args.input_dir += os.path.sep
+    
+    args.seeds = [int(s) for s in args.seeds.split(',')]
 
     return args
 
@@ -81,31 +85,39 @@ def main(argv):
     run_sc  = os.path.join(mydir, 'run_sc.py')
     cmds = []
 
-    # build all of the commands for the specified obfuscations
-    for obf in args.obfuscation:
-        obfuscations = obf.split(',')
-        # generate obfuscation string
-        obf_str = ' '.join(["--obfuscation {}".format(o) for o in obfuscations])
-        # generate output filename
-        out_fname_id = '-'.join(obfuscations)
-
-        fpath = os.path.abspath(os.path.join(args.input_dir, game_info['rel_bc_path']))
-        # get output name
-        out_name, _ = os.path.splitext(os.path.basename(fpath))
-        # extension is only requried on windows
-        ext = '.exe' if os.name == 'nt' else ''
-        out_name = '{}+{}{}'.format(out_name, out_fname_id, ext)
-        out_path = os.path.join(args.output, out_name)
-        cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} -o "{out}"'.format(
-            run=run_sc, obf=obf_str, source=fpath, out=out_path,
-            link_args=game_info['link_args'],
-            protected_func_arg=game_info['protected_func_arg'],
-            conn=args.connectivity)
-        cmds.append(cmd)
-    if args.verbose:
-        pprint(cmds)
     print('[*] creating output dir {}'.format(args.output))
     os.mkdir(args.output)
+
+    for seed in args.seeds:
+        seed_dir = os.path.join(args.output, 'seed_{}'.format(seed))
+        if args.verbose:
+            print('[*] seed dir: {}'.format(seed_dir))
+        if not os.path.exists(seed_dir):
+            os.mkdir(seed_dir)
+        # build all of the commands for the specified obfuscations
+        for obf in args.obfuscation:
+            obfuscations = obf.split(',')
+            # generate obfuscation string
+            obf_str = ' '.join(["--obfuscation {}".format(o) for o in obfuscations])
+            # generate output filename
+            out_fname_id = '-'.join(obfuscations)
+
+            fpath = os.path.abspath(os.path.join(args.input_dir, game_info['rel_bc_path']))
+            # get output name
+            out_name, _ = os.path.splitext(os.path.basename(fpath))
+            # extension is only requried on windows
+            ext = '.exe' if os.name == 'nt' else ''
+            out_name = '{}+{}{}'.format(out_name, out_fname_id, ext)
+            out_path = os.path.join(seed_dir, seed_dir, out_name)
+            cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} -o "{out}"'.format(
+                run=run_sc, obf=obf_str, source=fpath, out=out_path,
+                link_args=game_info['link_args'],
+                protected_func_arg=game_info['protected_func_arg'],
+                conn=args.connectivity,
+                seed=seed)
+            cmds.append(cmd)
+    if args.verbose:
+        pprint(cmds)
 
     pool = Pool(args.process_count)
     futures = []
