@@ -59,10 +59,10 @@ def parse_args(argv):
     parser.add_argument("-ob", "--obfuscation",
                         action='append',
                         help='\n'.join(
-                            ["obfuscation transformations used on the checker function.",
+                            ["Obfuscation transformations used on the checker function.",
                             "format is obf_name.coverage.",
-                            "E.g. indir.10 to obfuscate 10% of the functions",
-                            "in addition to the checker functions since these will always be obfuscated",
+                            "E.g. indir.10 to obfuscate 10%% of the functions",
+                            "in addition to the checker functions since these will always be obfuscated.",
                             "Options are: {}".format(', '.join(obfuscation_options))]))
     parser.add_argument("-v", "--verbose", help="print debugging information",
                         action="store_true")
@@ -167,9 +167,12 @@ def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_f
         print("apply_selfchecking failed:\n   {}".format(cmd))
         return False
     # run optimizations
-    if not run_cmd([OPT, '-O3', checked_bc, '-o', checked_bc]):
+    checked_optimized_bc, ext = os.path.splitext(checked_bc)
+    checked_optimized_bc = checked_optimized_bc + "_opt" + ext
+    if not run_cmd([OPT, '-O1', checked_bc, '-o', checked_optimized_bc]):
         print("apply_selfchecking optimization failed")
         return False
+    checked_bc = checked_optimized_bc
     
     # read the patch guide and get all of the functions containing checkers
     with open(patch_guide_path, 'r') as f:
@@ -359,6 +362,7 @@ def patch_binary_ghidra(args, build_dir, out_file):
         ghidra_headless,
         build_dir,     # project location
         'tmp_project', # project name
+        '-noanalysis',
         '-import', out_file,
         '-postscript', ghidra_dump_path,
         dump_args
