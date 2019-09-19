@@ -36,6 +36,10 @@ def parse_args(argv):
     parser.add_argument("--demo-file",
         help="path to the demo file. Uses input_dir/fps_demo.lmp by default",
         required=False)
+    parser.add_argument("-i", "--iterations",
+        help="number of times the benchmarks will be repeated",
+        default=1,
+        type=int)
     parser.add_argument("--print-only", action="store_true",
         help="only print the commands but do not execute them")
     parser.add_argument("--clean-first",
@@ -87,59 +91,77 @@ def main(argv):
         print('[*] specify --clean-first to remove it automatically')
         return False
     
-    glob_str = args.input_dir + 'crispy-doom+*'
+    seed_glob_str = args.input_dir + 'seed_*/'
+    seed_dirs = glob(seed_glob_str)
     if args.verbose:
-        print('[*] globbing for samples: {}'.format(glob_str))
-    samples = glob(glob_str)
-    if args.verbose:
-        print('[*] globbing result: {}'.format(samples))
-    if not samples:
-        print('[-] no samples found with glob {}'.format(glob_str))
-        return False
-
-
-    # build all of the commands
-    cmds = []
-    for sample in samples:
-        cmd = [
-            VOGLPERF_LOCATION, '--logfile', '--fpsshow', '--',
-            sample, '-nosound', '-playdemo', args.demo_file,
-            '-extraconfig', args.config_path
-        ]
-        cmds.append(cmd)
-
-    if args.verbose:
-        pprint(cmds)
+        print('[*] globbing seed dir result: {}'.format(seed_dirs))
 
     print('[*] creating output dir {}'.format(args.output))
     os.mkdir(args.output)
+    for seed_dir in seed_dirs:
+        # name of the seed directory
+        seed_name = os.path.basename(os.path.abspath(seed_dir))
+        # output directory
+        seed_output = os.path.join(args.output, seed_name)
 
-    # go through all commands and launch them
-    for cmd in cmds:
-        if args.verbose or args.print_only:
-            print('running {}'.format(' '.join(cmd)))
-        if args.print_only:
-            continue
+        # make sure we can glob correctly
+        if seed_dir[-1] != os.pathsep:
+            seed_dir = seed_dir + '/'
+        glob_str = seed_dir + 'crispy-doom+*'
+        if args.verbose:
+            print('[*] globbing for samples: {}'.format(glob_str))
+        samples = glob(glob_str)
+        if args.verbose:
+            print('[*] globbing result: {}'.format(samples))
+        if not samples:
+            print('[-] no samples found with glob {}'.format(glob_str))
+            return False
 
-        # run command and check whether it was successful
-        retcode, output = run_cmd_output(cmd)
-        if retcode != 0:
-            print('[-] command failed: {}'.format(' '.join(cmd)))
-            print('output: {}'.format(output))
-            return False
-        
-        # parse output for logfile location
-        logfile_pattern = r'\(voglperf\) logfile_close\((.*?\.csv)\)'
-        match = re.search(logfile_pattern, output)
-        if not match:
-            print('[-] could not find logfile in voglperf output')
-            print('regex: ', logfile_pattern)
-            print('output: ', output)
-            return False
-        logfile_loc = match.group(1)
-            
-        # copy the logfile to the output directory
-        shutil.copy(logfile_loc, args.output)
+
+        # build all of the commands
+        cmds = []
+        for sample in samples:
+            cmd = [
+                VOGLPERF_LOCATION, '--logfile', '--fpsshow', '--',
+                sample, '-nosound', '-playdemo', args.demo_file,
+                '-extraconfig', args.config_path
+            ]
+            cmds.append(cmd)
+
+        if args.verbose:
+            pprint(cmds)
+
+        print('[*] creating intermediate output dir {}'.format(seed_output))
+        os.mkdir(seed_output)
+
+        # run each command param iteration times
+        for i in range(args.iterations):
+            # go through all commands and launch them
+            for cmd in cmds:
+                if args.verbose or args.print_only:
+                    print('running {}'.format(' '.join(cmd)))
+                if args.print_only:
+                    continue
+
+                # run command and check whether it was successful
+                retcode, output = run_cmd_output(cmd)
+                if retcode != 0:
+                    print('[-] command failed: {}'.format(' '.join(cmd)))
+                    print('output: {}'.format(output))
+                    return False
+                
+                # parse output for logfile location
+                logfile_pattern = r'\(voglperf\) logfile_close\((.*?\.csv)\)'
+                match = re.search(logfile_pattern, output)
+                if not match:
+                    print('[-] could not find logfile in voglperf output')
+                    print('regex: ', logfile_pattern)
+                    print('output: ', output)
+                    return False
+                logfile_loc = match.group(1)
+                    
+                # copy the logfile to the output directory
+                shutil.copy(logfile_loc, seed_output)
 
 
     print('[+] Done')

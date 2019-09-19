@@ -169,13 +169,15 @@ def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_f
     if not run_cmd(cmd):
         print("apply_selfchecking failed:\n   {}".format(cmd))
         return False
-    # run optimizations
-    checked_optimized_bc, ext = os.path.splitext(checked_bc)
-    checked_optimized_bc = checked_optimized_bc + "_opt" + ext
-    if not run_cmd([OPT, '-O1', checked_bc, '-o', checked_optimized_bc]):
-        print("apply_selfchecking optimization failed")
-        return False
-    checked_bc = checked_optimized_bc
+    
+    # scvirt cannot handle optimizations
+    # # run optimizations
+    # checked_optimized_bc, ext = os.path.splitext(checked_bc)
+    # checked_optimized_bc = checked_optimized_bc + "_opt" + ext
+    # if not run_cmd([OPT, '-O1', checked_bc, '-o', checked_optimized_bc]):
+    #     print("apply_selfchecking optimization failed")
+    #     return False
+    # checked_bc = checked_optimized_bc
     
     # read the patch guide and get all of the functions containing checkers
     with open(patch_guide_path, 'r') as f:
@@ -251,7 +253,7 @@ def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path, se
                 cmd = [os.path.join(ollvm_bin, 'opt'),
                     '-o', checker_bc,
                     # '-c', '-emit-llvm',
-                    '-rng-seed', str(seed),
+                    '-obfuscation-seed', str(seed),
                     '-filter-file', checker_functions_path,
                     bc_input,
                 ]
@@ -269,9 +271,10 @@ def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path, se
             elif obf in scvirt_options:
                 cmd = [ scvirt_opt,
                     '-o', checker_bc,
-                    '-rng-seed', str(seed),
                     '-load', scvirt_lib,
                     scvirt_options[obf]['pass_name'],
+                    scvirt_options[obf]['coverage_name'], str(round(float(coverage)/100, 1)),
+                    '-obfuscation-seed', str(seed),
                     '-dump-file', os.path.join(build_dir, 'scvirt_stats.txt'),
                     '-filter-file', checker_functions_path,
                     bc_input
