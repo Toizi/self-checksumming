@@ -105,8 +105,8 @@ def main(argv):
         seed_output = os.path.join(args.output, seed_name)
 
         # make sure we can glob correctly
-        if seed_dir[-1] != os.pathsep:
-            seed_dir = seed_dir + '/'
+        if seed_dir[-1] != os.sep:
+            seed_dir = seed_dir + os.sep
         glob_str = seed_dir + 'crispy-doom+*'
         if args.verbose:
             print('[*] globbing for samples: {}'.format(glob_str))
