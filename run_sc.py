@@ -77,6 +77,8 @@ def parse_args(argv):
     parser.add_argument("-con", "--connectivity", help="desired connectiviy of the checkers network", type=int, default=2)
     parser.add_argument("--seed", help="the seed value to pass to self-checking and obfuscations",
         type=int, default=1337, required=True)
+    parser.add_argument("--sc-ratio", help="the ratio of functions that should be checked",
+        type=float, default=0, required=True)
     parser.add_argument("source_file")
     
     args = parser.parse_args(argv)
@@ -126,7 +128,7 @@ def compile_source_to_bc(source_file, build_dir):
         return False
     return source_bc
 
-def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str, checker_functions_path, seed):
+def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str, checker_functions_path, seed, sc_ratio):
     checked_bc = os.path.join(build_dir, 'checked.bc')
     # -load "{indep_path}/libInputDependency.so" 
     # -load "{indep_path}/libTransforms.so" 
@@ -139,17 +141,13 @@ def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_f
         filter_cmd = ['-filter-file', checked_functions_path]
     else:
         filter_cmd = []
-    # cmd = '{opt} -load "{util}" -load "{sc_build}/lib/libSCPass.so" -strip-debug -unreachableblockelim -globaldce -use-other-functions -sc -connectivity={con} -dump-checkers-network="{checker_network}" -patch-guide="{build_dir}/patch_guide.txt" -dump-sc-stat="{build_dir}/sc.stats" -checker-bitcode={checker} {filter_cmd} -o "{out}" "{src}"'.format(
-    #         opt=OPT, indep_path=INPUTDEP_PATH, util=UTILLIB, sc_build=SC_BUILD,
-    #         con=connectivity, build_dir=build_dir, src=source_bc, out=checked_bc,
-    #         checker=checker_bc, filter_cmd=filter_cmd,
-    #         checker_network=checker_network_path)
     patch_guide_path = '{}/patch_guide.txt'.format(build_dir)
     cmd = [
         OPT,
         '-load', UTILLIB,
         '-load', '{}/lib/libSCPass.so'.format(SC_BUILD),
         '-strip-debug', '-unreachableblockelim', '-globaldce',
+        '-sc-ratio', str(sc_ratio),
         '-use-other-functions', '-sc', '-connectivity={}'.format(connectivity),
         '-dump-checkers-network', '{}/network_file'.format(build_dir),
         '-patch-guide', patch_guide_path,
@@ -245,10 +243,9 @@ def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path, se
 
 
             # check for ollvm obfuscations
-            if obf in ollvm_options or obf == 'none':
-                # TODO: check whether subst obfuscation is working, i.e. what it even does
-                transforms = [] if obf == 'none' else [ollvm_options[obf]['pass_name']]
-                coverages = [] if obf == 'none' else [ollvm_options[obf]['coverage_name'],
+            if obf in ollvm_options or 'none' in obf:
+                transforms = [] if 'none' in obf else [ollvm_options[obf]['pass_name']]
+                coverages = [] if 'none' in obf else [ollvm_options[obf]['coverage_name'],
                     str(round(float(coverage)/100, 2))]
                 cmd = [os.path.join(ollvm_bin, 'opt'),
                     '-o', checker_bc,
@@ -448,7 +445,7 @@ def run(args, build_dir):
 
         checker_functions_path = '{}/checker_functions.txt'.format(build_dir)
         checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc,
-            checker_bc, args.checked_functions, checker_functions_path, args.seed)
+            checker_bc, args.checked_functions, checker_functions_path, args.seed, args.sc_ratio)
         if not checked_bc:
             print('[-] apply_selfchecking')
             return False

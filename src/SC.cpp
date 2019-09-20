@@ -50,6 +50,12 @@ static cl::opt<int> ScSeed(
     cl::desc(
         "The seed to use for the random selection of checkers/checkees"),
     llvm::cl::init(1337));
+  
+static cl::opt<double> ScRatio{
+    "sc-ratio",
+    cl::desc(
+        "Only apply checking on <ratio> of the candidates"),
+    cl::value_desc("ratio"), llvm::cl::init(0.0), llvm::cl::Optional};
 
 static cl::opt<int> MaximumPercOtherFunctions(
     "maximum-other-percentage", cl::Hidden,
@@ -190,6 +196,15 @@ struct SCPass : public ModulePass
     dbgs() << "Sensitive functions are never checkers as SensitiveOnlyChecked is set to:" << SensitiveOnlyChecked << "\n";
   }
 
+  std::unique_ptr<std::mt19937> rng;
+  std::unique_ptr<std::uniform_real_distribution<double>> dist;
+  bool doInitialization(llvm::Module &M) override {
+    rng.reset(new std::mt19937{ScSeed.getValue()});
+    dist.reset(new std::uniform_real_distribution<double>(0.0, 1.0));
+
+    return false;
+  }
+
   bool runOnModule(Module &M) override
   {
     bool didModify = false;
@@ -231,12 +246,14 @@ struct SCPass : public ModulePass
       // bool isExtracted = F_input_dependency_info->isExtractedFunction();
       // bool isSensitive = ExtractedOnly ? isExtracted : true; //only extracted functions if ExtarctedOnly is set
       // //honor the filter function list
-      if (!function_filter_info->is_function(&F))
+      if (function_filter_info->is_function(&F)
+        || ScRatio > 0 && (*dist)(*rng) < ScRatio)
       {
-        otherFunctions.push_back(&F);
-        continue;
+        sensitiveFunctions.push_back(&F);
+        if (SensitiveOnlyChecked)
+          continue;
       }
-      sensitiveFunctions.push_back(&F);
+      otherFunctions.push_back(&F);
       // //ExtractedOnly flag enforces the usage of other functions, regardless of the UseOtherFunctions flag
       // if (ExtractedOnly && (!isExtracted))
       // {

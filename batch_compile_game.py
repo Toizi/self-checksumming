@@ -51,6 +51,8 @@ def parse_args(argv):
     parser.add_argument("-con", "--connectivity",
         help="desired connectiviy of the checkers network",
         type=int, default=10)
+    parser.add_argument("--sc-ratio", help="the ratio of functions that should be checked",
+        type=float, default=0)
     parser.add_argument("input_dir", help="src directory of sauerbraten", type=str)
 
     args = parser.parse_args(argv)
@@ -109,12 +111,12 @@ def main(argv):
             ext = '.exe' if os.name == 'nt' else ''
             out_name = '{}+{}{}'.format(out_name, out_fname_id, ext)
             out_path = os.path.join(seed_dir, seed_dir, out_name)
-            cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} -o "{out}"'.format(
+            cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} --sc-ratio={sc_ratio} -o "{out}"'.format(
                 run=run_sc, obf=obf_str, source=fpath, out=out_path,
                 link_args=game_info['link_args'],
                 protected_func_arg=game_info['protected_func_arg'],
                 conn=args.connectivity,
-                seed=seed)
+                seed=seed, sc_ratio=args.sc_ratio)
             cmds.append(cmd)
     if args.verbose:
         pprint(cmds)
