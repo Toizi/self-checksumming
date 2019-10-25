@@ -57,6 +57,12 @@ static cl::opt<double> ScRatio{
         "Only apply checking on <ratio> of the candidates"),
     cl::value_desc("ratio"), llvm::cl::init(0.0), llvm::cl::Optional};
 
+static cl::opt<int> ScMinCount(
+    "sc-min-function-count", cl::Hidden,
+    cl::desc(
+        "Protect at least this many functions, regardless of the ratio"),
+    llvm::cl::init(1));
+
 static cl::opt<int> MaximumPercOtherFunctions(
     "maximum-other-percentage", cl::Hidden,
     cl::desc("The maximum usage percentage (between 0 and 100) of other functions (beyond the filter set) that should be also "
@@ -270,6 +276,26 @@ struct SCPass : public ModulePass
       //   dbgs() << "Adding " << F.getName() << " to sensitive vector\n";
       //   sensitiveFunctions.push_back(&F);
       // }
+    }
+
+    if (sensitiveFunctions.size() < ScMinCount) {
+      dbgs() << "sensitive function count less than minimum requested. filling up the rest\n";
+      int required_funcs = ScMinCount - sensitiveFunctions.size();
+      for (auto &func : otherFunctions) {
+        if (std::find(sensitiveFunctions.begin(), sensitiveFunctions.end(), func) != sensitiveFunctions.end())
+          continue;
+        
+        sensitiveFunctions.push_back(func);
+        --required_funcs;
+        if (required_funcs <= 0)
+          break;
+      }
+      if (required_funcs > 0) {
+        errs() << "could not satisfy requested minimum function count\n";
+        errs() << "requested: " << ScMinCount << '\n';
+        errs() << "found: " << sensitiveFunctions.size() << '\n';
+        exit(1);
+      }
     }
 
     auto rng = std::default_random_engine{ScSeed.getValue()};
