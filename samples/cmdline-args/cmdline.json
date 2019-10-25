@@ -1,0 +1,260 @@
+{
+  "rawcaudio.x": {
+    "args": [
+      "< rawcaudio_small.pcm"
+    ],
+    "required_files": [
+      "rawcaudio_small.pcm"
+    ]
+  },
+  "bitcnts.x": {
+    "args": [
+      "100"
+    ],
+    "required_files": []
+  },
+  "tiff2bw.x": {
+    "args": [
+      "tiff-data_small.tif",
+      "output_smallbw.tif"
+    ],
+    "required_files": [
+      "tiff-data_small.tif"
+    ]
+  },
+  "basicmath_large.x": {
+    "args": [],
+    "required_files": []
+  },
+  "say.x": {
+    "args": [
+      "-a",
+      "-q",
+      "-o",
+      "small_output.au",
+      "< rsynth_smallinput.txt"
+    ],
+    "required_files": [
+      "rsynth_smallinput.txt"
+    ]
+  },
+  "cjpeg.x": {
+    "args": [
+      "-dct",
+      "int",
+      "-progressive",
+      "-opt",
+      "-outfile",
+      "output_small_encode.jpeg",
+      "cjpeg_input_small.ppm"
+    ],
+    "required_files": [
+      "cjpeg_input_small.ppm"
+    ]
+  },
+  "dijkstra_large.x": {
+    "args": [
+      "dijkstra_input.dat"
+    ],
+    "required_files": [
+      "dijkstra_input.dat"
+    ]
+  },
+  "qsort_small.x": {
+    "args": [
+      "sort-input.txt"
+    ],
+    "required_files": [
+      "sort-input.txt"
+    ]
+  },
+  "2048_game": {
+    "args": [
+      "2048_input"
+    ],
+    "required_files": [
+      "2048_input"
+    ]
+  },
+  "pgp.x": {
+    "args": [
+      "-z",
+      "\"this is a test\"",
+      "-u",
+      "taustin@eecs.umich.edu",
+      "testout.txt.asc"
+    ],
+    "required_files": [
+      "testout.txt.asc"
+    ]
+  },
+  "dijkstra_small.x": {
+    "args": [
+      "dijkstra_input.dat"
+    ],
+    "required_files": [
+      "dijkstra_input.dat"
+    ]
+  },
+  "sha": {
+    "args": [
+      "sha_input_small.asc"
+    ],
+    "required_files": [
+      "sha_input_small.asc"
+    ]
+  },
+  "crc.x": {
+    "args": [
+      "crc_large.pcm"
+    ],
+    "required_files": [
+      "crc_large.pcm"
+    ]
+  },
+  "basicmath_small.x": {
+    "args": [],
+    "required_files": []
+  },
+  "bf.x": {
+    "args": [
+      "e",
+      "bf_input_small.asc",
+      "output_small.enc",
+      "1234567890abcdeffedcba0987654321"
+    ],
+    "required_files": [
+      "bf_input_small.asc"
+    ],
+    "success_exit_code": 1
+  },
+  "patricia.x": {
+    "args": [
+      "patricia_small.udp"
+    ],
+    "required_files": [
+      "patricia_small.udp"
+    ],
+    "success_exit_code": 1
+  },
+  "rawdaudio.x": {
+    "args": [
+      "< rawdaudio_small.adpcm"
+    ],
+    "required_files": [
+      "rawdaudio_small.adpcm"
+    ]
+  },
+  "fft.x": {
+    "args": [
+      "4",
+      "4096"
+    ],
+    "required_files": []
+  },
+  "toast.x": {
+    "args": [
+      "-fps",
+      "-c",
+      "toast_input_small.au"
+    ],
+    "required_files": [
+      "toast_input_small.au"
+    ]
+  },
+  "ispell.x": {
+    "args": [
+      "-a",
+      "-d",
+      "ispell_americanmed+.hash",
+      "< ispell_small.txt",
+      ""
+    ],
+    "required_files": [
+      "ispell_americanmed+.hash",
+      "ispell_small.txt"
+    ],
+    "success_exit_code": 1
+  },
+  "tiffmedian.x": {
+    "args": [
+      "tiff-data_small.tif",
+      "output_smallmedian.tif"
+    ],
+    "required_files": [
+      "tiff-data_small.tif"
+    ]
+  },
+  "tiffdither.x": {
+    "args": [
+      "-c",
+      "g4",
+      "tiff-data_smallbw.tif",
+      "output_smalldither.tif"
+    ],
+    "required_files": [
+      "tiff-data_smallbw.tif"
+    ]
+  },
+  "qsort_large.x": {
+    "args": [
+      "sort-input.txt"
+    ],
+    "required_files": [
+      "sort-input.txt"
+    ]
+  },
+  "tiff2rgba.x": {
+    "args": [
+      "-c",
+      "none",
+      "tiff-data_small.tif",
+      "output_smallrgba.tif"
+    ],
+    "required_files": [
+      "tiff-data_small.tif"
+    ]
+  },
+  "rijndael.x": {
+    "args": [
+      "rijndael_input_small.asc",
+      "output_small.enc",
+      "e",
+      "1234567890abcdeffedcba09876543211234567890abcdeffedcba0987654321"
+    ],
+    "required_files": [
+      "rijndael_input_small.asc"
+    ]
+  },
+  "susan": {
+    "args": [
+      "susan_input_small.pgm",
+      "output_small.smoothing.pgm",
+      "-s"
+    ],
+    "required_files": [
+      "susan_input_small.pgm"
+    ]
+  },
+  "djpeg.x": {
+    "args": [
+      "-dct",
+      "int",
+      "-ppm",
+      "-outfile",
+      "output_small_decode.ppm",
+      "djpeg_input_small.jpg"
+    ],
+    "required_files": [
+      "djpeg_input_small.jpg"
+    ]
+  },
+  "search_large.x": {
+    "args": [],
+    "required_files": []
+  },
+  "search_small.x": {
+    "args": [],
+    "required_files": []
+  }
+}
