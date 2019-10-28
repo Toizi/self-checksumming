@@ -171,7 +171,7 @@ def main(argv):
                     print('output at: {}'.format(output_path))
                     return False
 
-                result_path = os.path.join(seed_output, os.path.basename(cmd[0][0]) + '_' + str(i))
+                result_path = os.path.join(seed_output, 'result_' + os.path.basename(cmd[0][0]) + '_' + str(i))
                 with open(result_path, 'w') as f:
                     json.dump(run, f)
 
