@@ -11,6 +11,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -87,6 +88,10 @@ static cl::opt<std::string> PatchGuide(
 static cl::opt<std::string> CheckerBitcodePath(
     "checker-bitcode", cl::Hidden,
     cl::desc("File path of bitcode containing the checker function "));
+
+static cl::opt<std::string> DummyFunctionName(
+    "sc-dummy-function-name", cl::Hidden,
+    cl::desc("Insert a dummy function that can be used as protection target"));
 
 static const std::string CheckerFunctionName = "guardMe";
 
@@ -167,6 +172,28 @@ std::string demangle_name(const std::string &name)
   return demangled_name;
 }
 
+bool InsertDummyFunction(Module &M, const std::string &name, FunctionInformation *function_filter_info) {
+  // function already exists
+  if (M.getFunction(name)) {
+    return false;
+  }
+
+  auto void_ty = Type::getVoidTy(M.getContext());
+  Function *f = dyn_cast<Function>(M.getOrInsertFunction(name, void_ty));
+  BasicBlock *block = BasicBlock::Create(M.getContext(), "dummy", f);
+
+  InlineAsm *my_asm = InlineAsm::get(FunctionType::get(void_ty, false), "xorl %eax,% eax", "", true);//, false, InlineAsm::AsmDialect::AD_Intel);
+
+  IRBuilder<> irb (block);
+  irb.CreateCall(my_asm);
+  irb.CreateRetVoid();
+
+  // add function to filter info
+  function_filter_info->add_function(f);
+
+  return true;
+}
+
 struct SCPass : public ModulePass
 {
   Stats stats;
@@ -224,6 +251,14 @@ struct SCPass : public ModulePass
         getAnalysis<FunctionMarkerPass>().get_functions_info();
     auto function_filter_info =
         getAnalysis<FunctionFilterPass>().get_functions_info();
+      
+    if (!DummyFunctionName.empty()) {
+      if (!InsertDummyFunction(M, DummyFunctionName.getValue(), function_filter_info)) {
+        errs() << "Could not insert dummy function with name " << DummyFunctionName.getValue() << "\n";
+        exit(1);
+      }
+    }
+
 
     auto *sc_guard_md_str = llvm::MDString::get(M.getContext(), sc_guard_str);
     sc_guard_md = llvm::MDNode::get(M.getContext(), sc_guard_md_str);

@@ -79,6 +79,9 @@ def parse_args(argv):
         type=int, default=1337, required=True)
     parser.add_argument("--sc-ratio", help="the ratio of functions that should be checked",
         type=float, default=0, required=True)
+    parser.add_argument("--dummy-function-name",
+        help="insert a dummy function that can be used as protection target",
+        type=str, required=False)
     parser.add_argument("source_file")
     
     args = parser.parse_args(argv)
@@ -128,7 +131,7 @@ def compile_source_to_bc(source_file, build_dir):
         return False
     return source_bc
 
-def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str, checker_functions_path, seed, sc_ratio):
+def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_functions_str, checker_functions_path, seed, sc_ratio, dummy_function_name):
     checked_bc = os.path.join(build_dir, 'checked.bc')
     # -load "{indep_path}/libInputDependency.so" 
     # -load "{indep_path}/libTransforms.so" 
@@ -162,6 +165,8 @@ def apply_selfchecking(connectivity, build_dir, source_bc, checker_bc, checked_f
     ]
     if filter_cmd:
         cmd.extend(filter_cmd)
+    if dummy_function_name:
+        cmd.extend(['-sc-dummy-function-name', dummy_function_name])
 
     # run the command
     if not run_cmd(cmd):
@@ -445,7 +450,7 @@ def run(args, build_dir):
 
         checker_functions_path = '{}/checker_functions.txt'.format(build_dir)
         checked_bc = apply_selfchecking(args.connectivity, build_dir, source_bc,
-            checker_bc, args.checked_functions, checker_functions_path, args.seed, args.sc_ratio)
+            checker_bc, args.checked_functions, checker_functions_path, args.seed, args.sc_ratio, args.dummy_function_name)
         if not checked_bc:
             print('[-] apply_selfchecking')
             return False

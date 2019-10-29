@@ -122,10 +122,10 @@ def main(argv):
                 ext = '.exe' if os.name == 'nt' else ''
                 out_name = '{}+{}{}'.format(out_name, out_fname_id, ext)
                 out_path = os.path.join(seed_dir, seed_dir, out_name)
-                cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} --sc-ratio={sc_ratio} -o "{out}"'.format(
+                cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} --sc-ratio={sc_ratio} --dummy-function-name=mibench_dummy -o "{out}"'.format(
                     run=run_sc, obf=obf_str, source=fpath, out=out_path,
                     link_args=link_args,
-                    protected_func_arg='',
+                    protected_func_arg='--checked-functions=mibench_dummy',
                     conn=args.connectivity,
                     seed=seed, sc_ratio=args.sc_ratio)
                 cmds.append(cmd)
