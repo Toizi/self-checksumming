@@ -182,7 +182,7 @@ bool InsertDummyFunction(Module &M, const std::string &name, FunctionInformation
   Function *f = dyn_cast<Function>(M.getOrInsertFunction(name, void_ty));
   BasicBlock *block = BasicBlock::Create(M.getContext(), "dummy", f);
 
-  InlineAsm *my_asm = InlineAsm::get(FunctionType::get(void_ty, false), "xorl %eax,% eax", "", true);//, false, InlineAsm::AsmDialect::AD_Intel);
+  InlineAsm *my_asm = InlineAsm::get(FunctionType::get(void_ty, false), "movl 1, %eax", "", true);//, false, InlineAsm::AsmDialect::AD_Intel);
 
   IRBuilder<> irb (block);
   irb.CreateCall(my_asm);
