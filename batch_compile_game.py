@@ -27,6 +27,7 @@ games = {
         'rel_bc_path': 'sauer_client.bc',
         'protected_func_arg': '--checked-functions=_ZN4game5shootEP6fpsentRK3vec',
     },
+    # working seeds: 4,7,19,31,34,47,49,57,67,1338
     'crispy-doom': {
         'link_args': '--link-args="-DNDEBUG src/doom/libdoom.a /usr/lib/x86_64-linux-gnu/libSDL2main.a /usr/lib/x86_64-linux-gnu/libSDL2.so /usr/lib/x86_64-linux-gnu/libSDL2_mixer.so /usr/lib/x86_64-linux-gnu/libSDL2_net.so textscreen/libtextscreen.a pcsound/libpcsound.a opl/libopl.a /usr/lib/x86_64-linux-gnu/libpng.so -lm /usr/lib/x86_64-linux-gnu/libSDL2_mixer.so /usr/lib/x86_64-linux-gnu/libSDL2.so /usr/lib/x86_64-linux-gnu/libz.so"',
         'rel_bc_path': 'src/crispy-doom.bc',
