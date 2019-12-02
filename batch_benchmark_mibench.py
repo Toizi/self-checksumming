@@ -56,6 +56,7 @@ def parse_args(argv):
 def main(argv):
     args = parse_args(argv)
     mydir = os.path.dirname(os.path.abspath(__file__))
+    libminm_path = os.path.join(mydir, 'hook/build/libminm_env.so')
     cmd_infos_path = os.path.join(mydir, 'samples/cmdline-args/cmdline.json')
     cmdline_dir = os.path.join(mydir, 'samples/cmdline-args')
     build_dir = tempfile.mkdtemp()
@@ -132,7 +133,7 @@ def main(argv):
             cmd_list.extend(cmd_info['args'])
             # some programs exit with something other than 0 on success...
             success_exit_code = cmd_info.get('success_exit_code', 0)
-            cmd = (cmd_list, sample_working_dir, success_exit_code)
+            cmd = (cmd_list, sample_working_dir, success_exit_code, cmd_info.get('env'))
             cmds.append(cmd)
 
         if args.verbose:
@@ -151,7 +152,7 @@ def main(argv):
         for i in exec_iterator:
             for cmd in cmds:
                 if args.verbose or args.print_only:
-                    print('running {}'.format(' '.join(cmd)))
+                    print('running {}'.format(' '.join(cmd[0])))
                 if args.print_only:
                     continue
 
@@ -163,7 +164,17 @@ def main(argv):
                     "/run": DIR_HIDDEN,
                     "/tmp": DIR_HIDDEN,
                     build_dir: DIR_FULL_ACCESS})
-                run = executor.execute_run(cmd[0], output_path, workingDir=cmd[1])
+
+                # prepare environment
+                env = os.environ
+                if cmd[3]:
+                    for key, val in cmd[3].items():
+                        env[key] = val
+                # env['LD_PRELOAD'] = libminm_path
+                if args.verbose:
+                    print('working dir: {}'.format(cmd[1]))
+                    # print('environment: {}'.format(env))
+                run = executor.execute_run(cmd[0], output_path, workingDir=cmd[1], environments=env)
                 exitcode = run['exitcode']
                 if exitcode.value != cmd[2]:
                     print(exitcode)
