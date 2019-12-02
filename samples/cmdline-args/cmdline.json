@@ -9,7 +9,8 @@
   },
   "bitcnts.x": {
     "args": [
-      "100"
+      "100",
+      "| head -n -3"
     ],
     "required_files": []
   },
@@ -20,7 +21,8 @@
     ],
     "required_files": [
       "tiff-data_small.tif"
-    ]
+    ],
+    "output_file": "output_smallbw.tif"
   },
   "basicmath_large.x": {
     "args": [],
@@ -36,7 +38,8 @@
     ],
     "required_files": [
       "rsynth_smallinput.txt"
-    ]
+    ],
+    "output_file": "small_output.au"
   },
   "cjpeg.x": {
     "args": [
@@ -50,7 +53,8 @@
     ],
     "required_files": [
       "cjpeg_input_small.ppm"
-    ]
+    ],
+    "output_file": "output_small_encode.jpeg"
   },
   "dijkstra_large.x": {
     "args": [
@@ -106,10 +110,10 @@
   },
   "crc.x": {
     "args": [
-      "crc_large.pcm"
+      "crc_small_input"
     ],
     "required_files": [
-      "crc_large.pcm"
+      "crc_small_input"
     ]
   },
   "basicmath_small.x": {
@@ -126,6 +130,7 @@
     "required_files": [
       "bf_input_small.asc"
     ],
+    "output_file": "output_small.asc",
     "success_exit_code": 1
   },
   "patricia.x": {
@@ -183,7 +188,8 @@
     ],
     "required_files": [
       "tiff-data_small.tif"
-    ]
+    ],
+    "output_file": "output_smallmedian.tif"
   },
   "tiffdither.x": {
     "args": [
@@ -194,7 +200,8 @@
     ],
     "required_files": [
       "tiff-data_smallbw.tif"
-    ]
+    ],
+    "output_file": "output_smalldither.tif"
   },
   "qsort_large.x": {
     "args": [
@@ -213,7 +220,8 @@
     ],
     "required_files": [
       "tiff-data_small.tif"
-    ]
+    ],
+    "output_file": "output_smallrgba.tif"
   },
   "rijndael.x": {
     "args": [
@@ -224,7 +232,8 @@
     ],
     "required_files": [
       "rijndael_input_small.asc"
-    ]
+    ],
+    "output_file": "output_small.enc"
   },
   "susan": {
     "args": [
@@ -234,7 +243,8 @@
     ],
     "required_files": [
       "susan_input_small.pgm"
-    ]
+    ],
+    "output_file": "output_small.smoothing.pgm"
   },
   "djpeg.x": {
     "args": [
@@ -247,13 +257,22 @@
     ],
     "required_files": [
       "djpeg_input_small.jpg"
-    ]
+    ],
+    "output_file": "output_small_decode.ppm"
   },
   "search_large.x": {
     "args": [],
     "required_files": []
   },
   "search_small.x": {
+    "args": [],
+    "required_files": []
+  },
+  "tetris_predet": {
+    "args": [],
+    "required_files": []
+  },
+  "snake_predet": {
     "args": [],
     "required_files": []
   }
