@@ -9,10 +9,10 @@
   },
   "bitcnts.x": {
     "args": [
-      "100",
-      "| head -n -3"
+      "100"
     ],
-    "required_files": []
+    "required_files": [],
+    "eval_prepare_stdout": "'\\n'.join(s.splitlines()[:-3])"
   },
   "tiff2bw.x": {
     "args": [
@@ -130,7 +130,7 @@
     "required_files": [
       "bf_input_small.asc"
     ],
-    "output_file": "output_small.asc",
+    "output_file": "output_small.enc",
     "success_exit_code": 1
   },
   "patricia.x": {
@@ -270,7 +270,8 @@
   },
   "tetris_predet": {
     "args": [],
-    "required_files": []
+    "required_files": [],
+    "eval_prepare_stdout": "s[s.find('Your score'):]"
   },
   "snake_predet": {
     "args": [],

@@ -9,7 +9,7 @@
 #define KMAG  "\x1B[35m"
 #define KCYN  "\x1B[36m"
 #define KWHT  "\x1B[37m"
-void guardMe(const unsigned int address, const unsigned int length, const unsigned int expectedHash){
+void guardMe(const unsigned int address, const unsigned int length, const unsigned int expectedHash, const unsigned int uid){
 
 	const unsigned char  *beginAddress = (const unsigned char *)address;
 	unsigned int visited = 0;
@@ -32,8 +32,8 @@ void guardMe(const unsigned int address, const unsigned int length, const unsign
 	// printf("hash: %#hhx\n", hash);
 	if (hash !=(unsigned char)expectedHash) {
 		//response();
-		printf("%sTampered binary!, expected != computed (%#x != %#hhx) \n",
-			KNRM, expectedHash, hash);
+		printf("%sTampered binary (id = %u)!, expected != computed (%#x != %#hhx) \n",
+			KNRM, uid, expectedHash, hash);
 
 		// void* callstack[128];
 		// int i, frames = backtrace(callstack, 128);

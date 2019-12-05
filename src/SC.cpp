@@ -17,6 +17,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/MD5.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Linker/Linker.h"
@@ -630,7 +631,7 @@ struct SCPass : public ModulePass
     LLVMContext &Ctx = BB->getParent()->getContext();
     // get BB parent -> Function -> get parent -> Module
     llvm::ArrayRef<llvm::Type *> params;
-    params = {Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx)};
+    params = {Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx)};
     llvm::FunctionType *function_type = llvm::FunctionType::get(llvm::Type::getVoidTy(Ctx), params, false);
     Constant *guardFunc = BB->getParent()->getParent()->getOrInsertFunction(CheckerFunctionName, function_type);
 
@@ -645,8 +646,19 @@ struct SCPass : public ModulePass
     unsigned int address = address_begin++;
     unsigned int expectedHash = expected_hash_begin++;
 
+    // creates MD5 hash of function name where checker gets inserted, salted
+    // with number of guard instructions for good measure
+    MD5 md5{};
+    md5.update(BB->getParent()->getName());
+    ArrayRef<uint8_t> numberOfGuardInstBuf((uint8_t*)&numberOfGuardInstructions, sizeof(numberOfGuardInstructions));
+    md5.update(numberOfGuardInstBuf);
+    MD5::MD5Result hash_result;
+    md5.final(hash_result);
+    unsigned int uid = *(uint32_t*)hash_result.Bytes.data();
+
     dbgs() << "placeholder:" << address << " "
-           << " size:" << length << " expected hash:" << expectedHash << "\n";
+           << " size:" << length << " expected hash:" << expectedHash
+           << " uid: " << uid << "\n";
     appendToPatchGuide(length, address, expectedHash, Checkee->getName(),
       BB->getParent()->getName());
     std::vector<llvm::Value *> args;
@@ -655,6 +667,8 @@ struct SCPass : public ModulePass
     auto *arg2 = llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), length);
     auto *arg3 =
         llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), expectedHash);
+    auto *arg4 =
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), uid);
     if (is_in_inputdep)
     {
       args.push_back(arg1);
@@ -667,6 +681,8 @@ struct SCPass : public ModulePass
       auto *A = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "a");
       auto *B = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "b");
       auto *C = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "c");
+      auto *D = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "uid");
+
       // make instructions volatile to stop optimizations from removing/folding
       // the values that we need to patch after linking
       bool isVolatile = true;
@@ -678,6 +694,8 @@ struct SCPass : public ModulePass
       // setPatchMetadata(store2, "length");
       auto *store3 = builder.CreateStore(arg3, C, /*isVolatile=*/isVolatile);
       store3->setMetadata(sc_guard_str, sc_guard_md);
+      auto *store4 = builder.CreateStore(arg4, D, /*isVolatile*/false);
+      store4->setMetadata(sc_guard_str, sc_guard_md);
       // setPatchMetadata(store3, "hash");
       auto *load1 = builder.CreateLoad(A, isVolatile);
       load1->setMetadata(sc_guard_str, sc_guard_md);
@@ -685,9 +703,13 @@ struct SCPass : public ModulePass
       load2->setMetadata(sc_guard_str, sc_guard_md);
       auto *load3 = builder.CreateLoad(C, isVolatile);
       load3->setMetadata(sc_guard_str, sc_guard_md);
+      auto *load4 = builder.CreateLoad(D, false /*isVolatile*/);
+      load4->setMetadata(sc_guard_str, sc_guard_md);
+
       args.push_back(load1);
       args.push_back(load2);
       args.push_back(load3);
+      args.push_back(load4);
 
       numberOfGuardInstructions += 9;
     }
