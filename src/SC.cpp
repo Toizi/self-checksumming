@@ -629,11 +629,15 @@ struct SCPass : public ModulePass
                    int &numberOfGuardInstructions, bool is_in_inputdep)
   {
     LLVMContext &Ctx = BB->getParent()->getContext();
+    Module &M = *BB->getParent()->getParent();
     // get BB parent -> Function -> get parent -> Module
     llvm::ArrayRef<llvm::Type *> params;
-    params = {Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx)};
-    llvm::FunctionType *function_type = llvm::FunctionType::get(llvm::Type::getVoidTy(Ctx), params, false);
-    Constant *guardFunc = BB->getParent()->getParent()->getOrInsertFunction(CheckerFunctionName, function_type);
+    params = {Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32PtrTy(Ctx)};
+    Function *guardFunc = BB->getParent()->getParent()->getFunction(CheckerFunctionName);
+    if (!guardFunc) {
+      errs() << "could not get guard function\n";
+      exit(1);
+    }
 
     IRBuilder<> builder(I);
     auto insertPoint = ++builder.GetInsertPoint();
@@ -669,6 +673,13 @@ struct SCPass : public ModulePass
         llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), expectedHash);
     auto *arg4 =
         llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), uid);
+
+    auto *arg5 = new GlobalVariable(M,
+      llvm::Type::getInt32Ty(Ctx),
+      false,
+      GlobalValue::LinkageTypes::PrivateLinkage,
+      llvm::ConstantInt::get(llvm::Type::getInt32Ty(Ctx), 0));
+
     if (is_in_inputdep)
     {
       args.push_back(arg1);
@@ -682,6 +693,7 @@ struct SCPass : public ModulePass
       auto *B = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "b");
       auto *C = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "c");
       auto *D = builder.CreateAlloca(Type::getInt32Ty(Ctx), nullptr, "uid");
+      // auto *E = builder.CreateAlloca(Type::getInt32PtrTy(Ctx), nullptr, "reported_tamper");
 
       // make instructions volatile to stop optimizations from removing/folding
       // the values that we need to patch after linking
@@ -696,6 +708,7 @@ struct SCPass : public ModulePass
       store3->setMetadata(sc_guard_str, sc_guard_md);
       auto *store4 = builder.CreateStore(arg4, D, /*isVolatile*/false);
       store4->setMetadata(sc_guard_str, sc_guard_md);
+      // auto *store5 = builder.CreateStore(arg5, E, /*isVolatile*/false);
       // setPatchMetadata(store3, "hash");
       auto *load1 = builder.CreateLoad(A, isVolatile);
       load1->setMetadata(sc_guard_str, sc_guard_md);
@@ -705,11 +718,13 @@ struct SCPass : public ModulePass
       load3->setMetadata(sc_guard_str, sc_guard_md);
       auto *load4 = builder.CreateLoad(D, false /*isVolatile*/);
       load4->setMetadata(sc_guard_str, sc_guard_md);
+      // auto *load5 = builder.CreateLoad(arg5, false);
 
       args.push_back(load1);
       args.push_back(load2);
       args.push_back(load3);
       args.push_back(load4);
+      args.push_back(arg5);
 
       numberOfGuardInstructions += 9;
     }

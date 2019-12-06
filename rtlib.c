@@ -9,51 +9,25 @@
 #define KMAG  "\x1B[35m"
 #define KCYN  "\x1B[36m"
 #define KWHT  "\x1B[37m"
-void guardMe(const unsigned int address, const unsigned int length, const unsigned int expectedHash, const unsigned int uid){
+
+void guardMe(const unsigned int address, const unsigned int length, const unsigned int expectedHash, const unsigned int uid, int *reported_tamper){
 
 	const unsigned char  *beginAddress = (const unsigned char *)address;
 	unsigned int visited = 0;
 	unsigned char hash = 0;
-	//Note: Length need to be divided by the size of 
-	//type of begin address that we are reading each time, 
-	//otherwise it falls out of the scope (see #3)
-//	printf("%sLength:%d Begin address:%d Expectedhash:%d\n",KRED,length,address,expectedHash);
+
 	#pragma clang loop vectorize(disable)
 	while (visited < length) {
-//		printf("%x ",*beginAddress);
 		hash ^= *beginAddress++;
 		++visited;
 	}
-//	printf("\n");
-	
-//	printf("%sruntime hash: %x\n",KGRN,hash);
-//	printf("%sexpected hash: %x\n",KBLU,expectedHash);
-//	printf("%s",KNRM);
-	// printf("hash: %#hhx\n", hash);
-	if (hash !=(unsigned char)expectedHash) {
-		//response();
+	if (*reported_tamper == 0 && hash !=(unsigned char)expectedHash) {
 		printf("%sTampered binary (id = %u)!, expected != computed (%#x != %#hhx) \n",
 			KNRM, uid, expectedHash, hash);
-
-		// void* callstack[128];
-		// int i, frames = backtrace(callstack, 128);
-		// char** strs = backtrace_symbols(callstack, frames);
-
-
-		// for (i = 0; i < frames; ++i) {
-		// 		printf("%s\n", strs[i]);
-		// }   
-
-		// free(strs);
+		*reported_tamper = 1;
 	}
 }
-//void respone(){
-//	printf("Tampered binary!");
-//}
-//void dbghashMe(int i, std::string valueName){
-//	printf("adding hash %s %i\n",valueName, i);
-//        hash +=i;
-//}
+
 void logHash() {
 	//printf("final hash: %ld\n", hash);
 }
