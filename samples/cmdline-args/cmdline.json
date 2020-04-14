@@ -246,7 +246,7 @@
     ],
     "output_file": "output_small.smoothing.pgm"
   },
-  "djpeg.x": {
+  "djpeg": {
     "args": [
       "-dct",
       "int",

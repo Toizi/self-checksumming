@@ -1,0 +1,7 @@
+say creates a file
+cjpeg creates a file
+ispell.x has basically no way of checking whether it works correctly since it only prints an error message
+bitcnts reported as "broken program" since the output is no stable
+susan creates a file
+
+
