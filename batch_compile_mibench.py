@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from __future__ import print_function
 from glob import glob
@@ -43,6 +43,9 @@ def parse_args(argv):
     parser.add_argument("-o", "--output", help="output path", required=False)
     parser.add_argument("-ob", "--obfuscation", help="list of obfuscations",
                         action='append', required=True)
+    parser.add_argument("--build-dir",
+        help="build dir to use to store temporary files and logs",
+        required=False)
     parser.add_argument("-j", "--process-count", type=int)
     parser.add_argument("--print-only", action="store_true",
         help="only print the commands to compile but do not execute them")
@@ -122,12 +125,21 @@ def main(argv):
                 ext = '.exe' if os.name == 'nt' else ''
                 out_name = '{}+{}{}'.format(out_name, out_fname_id, ext)
                 out_path = os.path.join(seed_dir, seed_dir, out_name)
-                cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} --sc-ratio={sc_ratio} --dummy-function-name=mibench_dummy -o "{out}"'.format(
+
+                if args.build_dir is not None:
+                    build_path = os.path.join(args.build_dir, binary_name, str(seed), obf)
+                    build_path = os.path.abspath(build_path)
+                    os.makedirs(build_path, exist_ok=True)
+                    build_path_arg = '--build-dir={}'.format(build_path)
+                else:
+                    build_path_arg = ''
+                cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} --sc-ratio={sc_ratio} --dummy-function-name=mibench_dummy -o "{out}" {build_dir}'.format(
                     run=run_sc, obf=obf_str, source=fpath, out=out_path,
                     link_args=link_args,
                     protected_func_arg='--checked-functions=mibench_dummy',
                     conn=args.connectivity,
-                    seed=seed, sc_ratio=args.sc_ratio)
+                    seed=seed, sc_ratio=args.sc_ratio,
+                    build_dir=build_path_arg)
                 cmds.append(cmd)
     if args.verbose:
         pprint(cmds)
