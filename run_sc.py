@@ -222,8 +222,10 @@ def obfuscate_checker_src(obfuscations, build_dir):
 
 def obfuscate_bc(obfuscations, build_dir, checker_bc, checker_functions_path, seed):
     ollvm_bin = os.path.join(SC_HOME, 'obfuscation/Obfuscator-LLVM/build/bin')
-    scvirt_opt = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/bin/opt')
-    scvirt_lib = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/lib/LLVMScVirt.so')
+    # scvirt_opt = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/bin/opt')
+    # scvirt_lib = os.path.join(SC_HOME, 'obfuscation/sc-virt-master/build/lib/LLVMScVirt.so')
+    scvirt_opt = os.path.join(SC_HOME, 'obfuscation/Obfuscator-LLVM/closed_source/opt')
+    scvirt_lib = os.path.join(SC_HOME, 'obfuscation/Obfuscator-LLVM/closed_source/LLVMScVirt.so')
 
     # no obfuscations specified, no need to obfuscate
     if not obfuscations:
