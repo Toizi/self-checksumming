@@ -3,8 +3,8 @@
 #include "FunctionMarker.h"
 #include "Stats.h"
 
-#include "input-dependency/FunctionInputDependencyResultInterface.h"
-#include "input-dependency/InputDependencyAnalysisPass.h"
+//#include "input-dependency/FunctionInputDependencyResultInterface.h"
+//#include "input-dependency/InputDependencyAnalysisPass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
