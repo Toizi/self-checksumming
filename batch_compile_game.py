@@ -54,7 +54,7 @@ def parse_args(argv):
         type=int, default=10)
     parser.add_argument("--sc-ratio", help="the ratio of functions that should be checked",
         type=float, default=0)
-    parser.add_argument("input_dir", help="src directory of sauerbraten", type=str)
+    parser.add_argument("input_dir", help="src directory of the game", type=str)
 
     args = parser.parse_args(argv)
 
