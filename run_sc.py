@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import print_function
 import argparse
 import tempfile
@@ -114,7 +114,7 @@ def setup_environment():
 def run_cmd(cmd, log_file=None):
     # print('run_cmd: {}'.format(cmd))
     try:
-        subprocess.check_call(shlex.split(cmd) if isinstance(cmd, basestring) else cmd,
+        subprocess.check_call(shlex.split(cmd) if isinstance(cmd, str) else cmd,
             stdout=log_file,
             stderr=log_file)
     except subprocess.CalledProcessError:
