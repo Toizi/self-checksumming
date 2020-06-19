@@ -41,16 +41,17 @@ def parse_args(argv):
     parser.add_argument("-v", "--verbose", help="print debugging information",
                         action="store_true")
     parser.add_argument("-o", "--output", help="output path", required=False)
-    parser.add_argument("-ob", "--obfuscation", help="list of obfuscations",
-                        action='append', required=True)
-    parser.add_argument("--build-dir",
-        help="build dir to use to store temporary files and logs",
-        required=False)
     parser.add_argument("-j", "--process-count", type=int)
     parser.add_argument("--print-only", action="store_true",
         help="only print the commands to compile but do not execute them")
-    # parser.add_argument("-g", "--game", help="the game to compile", type=str,
-    #     choices=(games.keys()), required=True)
+    
+    sc_group = parser.add_mutually_exclusive_group(required=True)
+    sc_group.add_argument("-ob", "--obfuscation", help="list of obfuscations",
+                        action='append')
+    sc_group.add_argument("--no-checking", action='store_true')
+    parser.add_argument("--build-dir",
+        help="build dir to use to store temporary files and logs",
+        required=False)
     parser.add_argument("--seeds", help="comma separated list of seeds to use",
         type=str, default="1", required=False)
     parser.add_argument("-con", "--connectivity",
@@ -58,6 +59,7 @@ def parse_args(argv):
         type=int, default=10)
     parser.add_argument("--sc-ratio", help="the ratio of functions that should be checked",
         type=float, default=0)
+
     parser.add_argument("input_dir", help="src directory of the bitcode files", type=str)
 
     args = parser.parse_args(argv)
@@ -65,6 +67,10 @@ def parse_args(argv):
     # parallel run by default
     if args.process_count is None:
         args.process_count = cpu_count() // 2
+    
+    if args.no_checking:
+        print('[*] no-checking specified. Not using obfuscation argument')
+        args.obfuscation = ['no_check']
 
     # create output dir from input dir if no output was specified
     if not args.output:
@@ -90,6 +96,7 @@ def main(argv):
 
     mydir   = os.path.dirname(os.path.abspath(__file__))
     run_sc  = os.path.join(mydir, 'run_sc.py')
+    run_no_sc  = os.path.join(mydir, 'run_no_sc.py')
     cmds = []
 
     print('[*] creating output dir {}'.format(args.output))
@@ -133,13 +140,16 @@ def main(argv):
                     build_path_arg = '--build-dir={}'.format(build_path)
                 else:
                     build_path_arg = ''
-                cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} --sc-ratio={sc_ratio} --dummy-function-name=mibench_dummy -o "{out}" {build_dir}'.format(
-                    run=run_sc, obf=obf_str, source=fpath, out=out_path,
-                    link_args=link_args,
-                    protected_func_arg='--checked-functions=mibench_dummy',
-                    conn=args.connectivity,
-                    seed=seed, sc_ratio=args.sc_ratio,
-                    build_dir=build_path_arg)
+                if args.no_checking:
+                    cmd = f'"{run_no_sc}" "{fpath}" {link_args} --compile-bc -cpp -o "{out_path}" {build_path_arg}'
+                else:
+                    cmd = '"{run}" {obf} "{source}" {link_args} --compile-bc -cpp --connectivity={conn} {protected_func_arg} --seed={seed} --sc-ratio={sc_ratio} --dummy-function-name=mibench_dummy -o "{out}" {build_dir}'.format(
+                        run=run_sc, obf=obf_str, source=fpath, out=out_path,
+                        link_args=link_args,
+                        protected_func_arg='--checked-functions=mibench_dummy',
+                        conn=args.connectivity,
+                        seed=seed, sc_ratio=args.sc_ratio,
+                        build_dir=build_path_arg)
                 cmds.append(cmd)
     if args.verbose:
         pprint(cmds)
